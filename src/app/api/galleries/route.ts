@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGalleries } from "@/lib/api";
 import { getCachedStartOffset } from "@/lib/start-offset";
-import { getUpstreamHttpStatus } from "@/lib/upstream-error";
+import { upstreamJsonError } from "@/lib/upstream-error";
 
 export const revalidate = 300;
 
@@ -23,10 +23,6 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "error";
-    return NextResponse.json(
-      { error: message },
-      { status: getUpstreamHttpStatus(message, 500) }
-    );
+    return upstreamJsonError(e, 500);
   }
 }

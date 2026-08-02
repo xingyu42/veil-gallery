@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Masonry from "./Masonry";
 import RemoteImage from "./RemoteImage";
 import Lightbox from "./Lightbox";
+import { availableImages } from "@/lib/api";
 import type { GalleryDetail, GalleryImage, GalleryImagePage } from "@/lib/types";
-import { describeUpstreamError } from "@/lib/upstream-error";
+import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
 const PAGE_SIZE = 20;
 
@@ -15,11 +16,7 @@ interface Props {
 
 export default function GalleryImages({ gallery }: Props) {
   const initialImages = useMemo(
-    () =>
-      gallery.images
-        .filter((image) => image.status === "active" || !image.status)
-        .filter((image) => image.uploaded === true || image.uploaded === undefined)
-        .sort((a, b) => a.sort_order - b.sort_order),
+    () => availableImages(gallery.images),
     [gallery.images]
   );
   const total = gallery.uploaded_images ?? gallery.image_count ?? initialImages.length;
@@ -67,8 +64,10 @@ export default function GalleryImages({ gallery }: Props) {
       setHasMore(data.has_more && offset + fresh.length < total);
       return fresh.length;
     } catch (caught) {
-      const rawMessage = caught instanceof Error ? caught.message : "后续图片加载失败";
-      const message = describeUpstreamError(rawMessage, "源站限流中，请稍后再试");
+      const message = describeUpstreamError(
+        getErrorMessage(caught, "后续图片加载失败"),
+        "源站限流中，请稍后再试"
+      );
       setError(message);
       return 0;
     } finally {
@@ -117,7 +116,10 @@ export default function GalleryImages({ gallery }: Props) {
 
   return (
     <>
-      <p className="mb-4 text-right text-xs text-white/35" aria-live="polite">
+      <p
+        className="mb-4 text-right text-xs text-[color:var(--muted)]"
+        aria-live="polite"
+      >
         已加载 {images.length} / {total} 张
       </p>
 
@@ -127,7 +129,7 @@ export default function GalleryImages({ gallery }: Props) {
             key={image.id}
             type="button"
             onClick={() => setActiveIndex(index)}
-            className="group relative mb-3 block w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-[#c9a87c]/40 focus:outline-none focus:ring-2 focus:ring-[#c9a87c]/60"
+            className="group relative mb-3 block w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
             aria-label={`放大查看 ${gallery.title} 第 ${image.sort_order} 张`}
           >
             <RemoteImage
@@ -136,7 +138,7 @@ export default function GalleryImages({ gallery }: Props) {
               className="w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-95"
             />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/20 group-hover:opacity-100">
-              <span className="rounded-full bg-black/55 px-3 py-1 text-xs text-white/90 backdrop-blur-sm">
+              <span className="keep-white rounded-full bg-black/55 px-3 py-1 text-xs text-white/90 backdrop-blur-sm">
                 点击放大
               </span>
             </div>
@@ -147,7 +149,7 @@ export default function GalleryImages({ gallery }: Props) {
       <div ref={sentinelRef} className="flex min-h-24 items-center justify-center py-6">
         {loading && (
           <div className="flex items-center gap-3 text-sm text-white/40">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#c9a87c]/30 border-t-[#c9a87c]" />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
             正在加载更多图片…
           </div>
         )}
@@ -155,7 +157,7 @@ export default function GalleryImages({ gallery }: Props) {
           <button
             type="button"
             onClick={() => void loadMore()}
-            className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/60 transition hover:border-[#c9a87c]/50 hover:text-[#c9a87c]"
+            className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/60 transition hover:border-accent/50 hover:text-accent"
           >
             加载失败，点击重试
           </button>

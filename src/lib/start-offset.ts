@@ -1,3 +1,4 @@
+import { USER_AGENT, upstreamUrl } from "./upstream";
 import { getUpstreamError } from "./upstream-error";
 
 /**
@@ -27,15 +28,13 @@ export function getDefaultStartOffset() {
   return DEFAULT_START_OFFSET;
 }
 
-const API_BASE = "https://veil.ortlinde.com";
-
 async function fetchPage(offset: number, limit: number) {
   const res = await fetch(
-    `${API_BASE}/v1/galleries?limit=${limit}&offset=${offset}`,
+    upstreamUrl(`/v1/galleries?limit=${limit}&offset=${offset}`),
     {
       headers: {
         Accept: "application/json",
-        "User-Agent": "VeilGallery/1.0 (+https://veil-gallery.vercel.app)",
+        "User-Agent": USER_AGENT,
       },
       // probe should be fresh
       cache: "no-store",

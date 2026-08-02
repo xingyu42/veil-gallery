@@ -55,7 +55,7 @@ export interface RateLimitResult {
  * Check if an upstream fetch is allowed under the per-region rate limit.
  *
  * Each Vercel Edge region has its own outbound IP pool. We limit each region
- * separately to ~80 req/5min (margin below upstream's 100/5min per IP).
+ * separately to 100 req/5min (matching upstream's limit per IP).
  *
  * Region identifier comes from process.env.VERCEL_REGION (e.g., "iad1", "hnd1").
  * If unavailable (local dev), falls back to "dev".

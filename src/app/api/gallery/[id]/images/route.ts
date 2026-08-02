@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGalleryImages } from "@/lib/api";
-import { getUpstreamHttpStatus } from "@/lib/upstream-error";
+import { upstreamJsonError } from "@/lib/upstream-error";
 
 export const revalidate = 300;
 
@@ -40,10 +40,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "加载失败";
-    return NextResponse.json(
-      { error: message },
-      { status: getUpstreamHttpStatus(message, 502) }
-    );
+    return upstreamJsonError(error, 502, "加载失败");
   }
 }

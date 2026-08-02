@@ -27,7 +27,7 @@ export default function Lightbox({
   onPrevious,
   onNext,
 }: Props) {
-  const [loadedId, setLoadedId] = useState<number | null>(null);
+  const [showSpinner, setShowSpinner] = useState(true);
   const touchStartX = useRef<number | null>(null);
   const current = index === null ? null : images[index];
   const canPrevious = index !== null && index > 0;
@@ -45,7 +45,7 @@ export default function Lightbox({
 
   useEffect(() => {
     if (!current) return;
-    setLoadedId(null);
+    setShowSpinner(true);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleKey);
@@ -68,7 +68,7 @@ export default function Lightbox({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-2 backdrop-blur-sm sm:p-5"
+      className="keep-white fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-2 backdrop-blur-sm sm:p-5"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -87,7 +87,7 @@ export default function Lightbox({
             event.stopPropagation();
             onClose();
           }}
-          className="pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-xl text-white transition hover:bg-white/20"
+          className="pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgba(255,255,255,0.1)] text-xl text-white transition hover:bg-[rgba(255,255,255,0.2)]"
           aria-label="关闭预览"
         >
           ×
@@ -118,9 +118,9 @@ export default function Lightbox({
           if (typeof x === "number") finishSwipe(x);
         }}
       >
-        {loadedId !== current.id && (
+        {showSpinner && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#c9a87c]/30 border-t-[#c9a87c]" />
+            <div className="h-9 w-9 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
           </div>
         )}
         <RemoteImage
@@ -130,8 +130,8 @@ export default function Lightbox({
           className="max-h-[92vh] max-w-full select-none object-contain shadow-2xl"
           placeholderClassName="h-full w-full"
           draggable={false}
-          onLoad={() => setLoadedId(current.id)}
-          onError={() => setLoadedId(current.id)}
+          onLoad={() => setShowSpinner(false)}
+          onError={() => setShowSpinner(false)}
         />
       </div>
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkUpstreamRateLimit } from "@/lib/rate-limit";
+import { USER_AGENT, upstreamImageUrl } from "@/lib/upstream";
 
 export const runtime = "edge";
 
@@ -35,25 +36,19 @@ export async function GET(
         "Retry-After": retryAfter.toString(),
         "X-RateLimit-Limit": rateLimit.limit.toString(),
         "X-RateLimit-Remaining": "0",
-        "X-RateLimit-Reset": Math.ceil((Date.now() + rateLimit.resetMs) / 1000).toString(),
+        "X-RateLimit-Reset": Math.ceil(
+          (Date.now() + rateLimit.resetMs) / 1000
+        ).toString(),
       },
     });
   }
 
-  const upstream = `https://veil.ortlinde.com/v1/image/${id}`;
+  const referer = request.headers.get("Referer");
+  const headers: HeadersInit = { "User-Agent": USER_AGENT };
+  if (referer) headers.Referer = referer;
 
   try {
-    const res = await fetch(upstream, {
-      headers: {
-        "User-Agent": "VeilGallery/1.0 (+https://veil-gallery.vercel.app)",
-        // Inherit visitor's Referer to stay polite, but don't forward Cookie/Auth
-        ...(request.headers.get("Referer") && {
-          Referer: request.headers.get("Referer")!,
-        }),
-      },
-      // Edge fetch() respects cache headers from upstream; force revalidation
-      // is not needed here — upstream returns long-lived cache directives.
-    });
+    const res = await fetch(upstreamImageUrl(id), { headers });
 
     if (!res.ok) {
       // 404 is normal (covers not uploaded yet); 429/403 less so but possible.

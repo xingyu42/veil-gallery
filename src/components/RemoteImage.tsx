@@ -37,15 +37,13 @@ export default function RemoteImage({
 
   if (failed) {
     return (
-      <>
-        {fallback ?? (
-          <div
-            className={`flex min-h-[120px] items-center justify-center bg-zinc-900 text-xs text-white/30 ${className}`}
-          >
-            图片加载失败
-          </div>
-        )}
-      </>
+      fallback ?? (
+        <div
+          className={`flex min-h-[120px] items-center justify-center bg-zinc-900 text-xs text-white/30 ${className}`}
+        >
+          图片加载失败
+        </div>
+      )
     );
   }
 

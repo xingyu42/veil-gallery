@@ -10,16 +10,15 @@ import type {
   FeaturedTag,
   ImageMeta,
 } from "./types";
+import { USER_AGENT, upstreamUrl } from "./upstream";
 import { getUpstreamError } from "./upstream-error";
 
-const API_BASE = "https://veil.ortlinde.com";
-
 async function apiFetch<T>(path: string, revalidateSeconds = 900): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(upstreamUrl(path), {
     next: { revalidate: revalidateSeconds },
     headers: {
       Accept: "application/json",
-      "User-Agent": "VeilGallery/1.0 (+https://veil-gallery.vercel.app)",
+      "User-Agent": USER_AGENT,
     },
   });
   if (!res.ok) {
@@ -50,6 +49,12 @@ export async function getTags(
   offset = 0
 ): Promise<Paginated<TagItem>> {
   return apiFetch(`/v1/tags?limit=${limit}&offset=${offset}`, 1800);
+}
+
+export async function getAllTags(): Promise<Paginated<TagItem>> {
+  // The 20,000-item payload exceeds Next's 2 MB data-cache limit.
+  // The API route caches the complete response at the CDN layer instead.
+  return apiFetch("/v1/tags?limit=20000&offset=0", 0);
 }
 
 export async function getGalleries(
@@ -130,7 +135,7 @@ function getImageTotal(payload: unknown, fallback: number): number {
   return fallback;
 }
 
-function availableImages(images: GalleryImage[]): GalleryImage[] {
+export function availableImages(images: GalleryImage[]): GalleryImage[] {
   return images
     .filter((image) => {
       const statusOk = image.status === "active" || !image.status;
@@ -167,12 +172,11 @@ export async function getGalleryImages(
     Math.max(expectedTotal, safeOffset, allImages.length)
   );
   const items = allImages
-    .filter((image) => {
-      if (typeof image.sort_order === "number" && image.sort_order > 0) {
-        return image.sort_order > safeAfterSortOrder;
-      }
-      return true;
-    })
+    .filter(
+      (image) =>
+        !(typeof image.sort_order === "number" && image.sort_order > 0) ||
+        image.sort_order > safeAfterSortOrder
+    )
     .slice(0, safeLimit);
 
   if (items.length === 0 && safeOffset < total) {
