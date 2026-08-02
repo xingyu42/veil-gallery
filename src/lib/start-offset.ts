@@ -1,4 +1,6 @@
+import { isDisplayableGallery } from "./api";
 import { getRedis } from "./redis";
+import type { GalleryListItem } from "./types";
 import { USER_AGENT, upstreamUrl } from "./upstream";
 import { getUpstreamError } from "./upstream-error";
 
@@ -12,22 +14,32 @@ import { getUpstreamError } from "./upstream-error";
  * 4. 0 — scan from the head; getGalleries() already skips empty batches
  *
  * Hardcoded 75797 was a one-shot measurement and drifts; do not treat it as truth.
+ *
+ * Note: calibrated for the unfiltered list only. Category feeds must start at 0.
  */
 
 const REDIS_KEY = "gallery:start_offset";
 const MEMORY_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
-/** Leave headroom under Vercel maxDuration=60 on calibrate-offset. */
+/**
+ * Probe budget under Vercel maxDuration=60.
+ * Upstream latency grows with offset (~1s@0, ~7s@50k, ~10s@80k, ~13s@98k).
+ *
+ * Strategy:
+ * 1. Sample head
+ * 2. Walk percentiles [0.5 → 0.7 → 0.85 → 0.95 → EOF] for first dense upper bound
+ *    (avoids always paying EOF latency when mid-range is already dense)
+ * 3. Bisect [lo, hi] until gap ≤ BINARY_STOP_GAP or budget exhausted
+ */
 const PROBE_BUDGET_MS = 45_000;
-// Upstream large offsets often take 5–8s (measured ~7.4s at offset=50k); 3.5s was too tight.
-const PROBE_FETCH_TIMEOUT_MS = 12_000;
-// Wall budget dominates: ~8 × 12s worst-case still exits via PROBE_BUDGET_MS.
-const PROBE_MAX_CALLS = 8;
+const PROBE_FETCH_TIMEOUT_MS = 15_000;
+const PROBE_MAX_CALLS = 10;
 const PROBE_SAMPLE_LIMIT = 10;
-const EXP_INITIAL_STEP = 5_000;
-const EXP_MAX_STEP = 50_000;
-const BINARY_STOP_GAP = 200;
+/** Stop refining when lo/hi gap is at most this many offsets. */
+const BINARY_STOP_GAP = 500;
 const PROBE_MAX_FAILURES = 3;
+/** Fractions of (total - sample) used to find a dense upper bound before bisection. */
+const UPPER_BOUND_PERCENTILES = [0.5, 0.7, 0.85, 0.95, 1] as const;
 
 type OffsetRecord = {
   offset: number;
@@ -49,7 +61,7 @@ function isFresh(record: OffsetRecord): boolean {
 }
 
 /**
- * Resolve the gallery list start offset.
+ * Resolve the gallery list start offset (unfiltered feeds only).
  * Prefer Redis over any baked-in constant.
  */
 export async function getStartOffset(): Promise<number> {
@@ -93,13 +105,6 @@ export async function getStartOffset(): Promise<number> {
   return 0;
 }
 
-/** @deprecated use getStartOffset() */
-export function getCachedStartOffset(): number {
-  if (memory && isFresh(memory)) return memory.offset;
-  if (memory) return memory.offset;
-  return envBootstrapOffset() ?? 0;
-}
-
 export async function setStartOffset(offset: number, total: number) {
   const record: OffsetRecord = {
     offset: Math.max(0, Math.floor(offset)),
@@ -117,16 +122,6 @@ export async function setStartOffset(offset: number, total: number) {
   } catch (error) {
     console.error("[start-offset] Redis write failed:", error);
   }
-}
-
-/** @deprecated use setStartOffset */
-export function setCachedStartOffset(offset: number, total: number) {
-  memory = {
-    offset: Math.max(0, Math.floor(offset)),
-    total: Math.max(0, Math.floor(total)),
-    checkedAt: Date.now(),
-  };
-  void setStartOffset(offset, total);
 }
 
 export function getDefaultStartOffset() {
@@ -151,15 +146,21 @@ async function fetchPage(offset: number, limit: number) {
     throw new Error(`API ${res.status}`);
   }
   return res.json() as Promise<{
-    items: { id: number; uploaded_images?: number }[];
+    items: GalleryListItem[];
     total: number;
   }>;
 }
 
-function pageRatio(items: { uploaded_images?: number }[]) {
+function pageRatio(items: GalleryListItem[]) {
   if (!items.length) return 0;
-  const good = items.filter((g) => (g.uploaded_images ?? 0) > 0).length;
+  const good = items.filter(isDisplayableGallery).length;
   return good / items.length;
+}
+
+function percentileOffset(total: number, fraction: number) {
+  const maxOff = Math.max(0, total - PROBE_SAMPLE_LIMIT);
+  if (fraction >= 1) return maxOff;
+  return Math.max(0, Math.min(maxOff, Math.floor(maxOff * fraction)));
 }
 
 export type ProbeResult = {
@@ -172,19 +173,25 @@ export type ProbeResult = {
 };
 
 /**
- * Budgeted exponential + coarse binary probe.
- * Early-writes the first dense candidate so a mid-run timeout still leaves Redis warm.
- * Expensive — cron / manual only. Never writes 0 just because the probe failed.
+ * Budgeted boundary search for the first dense offset (unfiltered list).
+ *
+ * Assumes density is roughly monotonic with offset (sparse head → dense tail),
+ * which matches upstream gallery upload history.
+ *
+ * 1. Sample head (0): if dense → startOffset=0
+ * 2. Walk percentiles for first dense upper bound (prefer mid-range over EOF)
+ * 3. Bisect [lo, hi] until gap ≤ BINARY_STOP_GAP or budget exhausted
+ * 4. Early-write first refined dense hi so mid-run timeout still warms Redis
+ * Never writes 0 solely because the probe failed.
+ * Never early-writes an unrefined near-EOF upper bound (would starve the feed).
  */
 export async function probeStartOffset(threshold = 0.5): Promise<ProbeResult> {
   const started = Date.now();
   let calls = 0;
   let failures = 0;
-  let best: number | null = null;
   let total = 0;
   let partial = false;
   let timedOut = false;
-  let earlyWritten = false;
 
   const elapsed = () => Date.now() - started;
 
@@ -193,11 +200,19 @@ export async function probeStartOffset(threshold = 0.5): Promise<ProbeResult> {
     calls < PROBE_MAX_CALLS &&
     failures < PROBE_MAX_FAILURES;
 
+  const markBudgetExhausted = () => {
+    timedOut =
+      timedOut ||
+      elapsed() >= PROBE_BUDGET_MS ||
+      calls >= PROBE_MAX_CALLS ||
+      failures >= PROBE_MAX_FAILURES;
+  };
+
   const sample = async (
     offset: number
   ): Promise<{ total: number; ratio: number } | null> => {
     if (!withinBudget()) {
-      timedOut = elapsed() >= PROBE_BUDGET_MS || calls >= PROBE_MAX_CALLS;
+      markBudgetExhausted();
       return null;
     }
     calls += 1;
@@ -224,124 +239,126 @@ export async function probeStartOffset(threshold = 0.5): Promise<ProbeResult> {
     }
   };
 
-  const persistBest = async (offset: number, tot: number) => {
-    await setStartOffset(offset, tot);
-  };
+  const done = (
+    startOffset: number,
+    opts: { partial: boolean; timedOut: boolean }
+  ): ProbeResult => ({
+    startOffset,
+    total,
+    calls,
+    partial: opts.partial,
+    timedOut: opts.timedOut,
+    elapsedMs: elapsed(),
+  });
 
-  const first = await sample(0);
-  if (!first) {
-    return {
-      startOffset: await getStartOffset(),
-      total,
-      calls,
+  // --- 1. Head ---
+  const head = await sample(0);
+  if (!head) {
+    return done(await getStartOffset(), { partial: false, timedOut: true });
+  }
+  total = head.total;
+
+  if (head.ratio >= threshold) {
+    await setStartOffset(0, total);
+    return done(0, { partial: false, timedOut: false });
+  }
+
+  if (total <= PROBE_SAMPLE_LIMIT) {
+    // Tiny catalog, all sparse.
+    return done(await getStartOffset(), {
       partial: false,
-      timedOut: true,
-      elapsedMs: elapsed(),
-    };
+      timedOut: false,
+    });
   }
 
-  total = first.total;
+  // --- 2. Percentile walk for dense upper bound (lo stays last known sparse) ---
+  let lo = 0;
+  let hi: number | null = null;
 
-  if (first.ratio >= threshold) {
-    best = 0;
-    await persistBest(best, total);
-    earlyWritten = true;
-  } else {
-    let hi = 0;
-    let step = EXP_INITIAL_STEP;
-    while (hi < total && withinBudget()) {
-      const cand = Math.min(hi + step, Math.max(0, total - PROBE_SAMPLE_LIMIT));
-      if (cand === hi) break;
-      const s = await sample(cand);
-      if (!s) break;
-      if (s.ratio >= threshold) {
-        best = cand;
-        // Early write: survive budget/timeout after first dense hit.
-        await persistBest(best, total);
-        earlyWritten = true;
-        break;
-      }
-      hi = cand;
-      step = Math.min(step * 2, EXP_MAX_STEP);
+  for (const fraction of UPPER_BOUND_PERCENTILES) {
+    if (!withinBudget()) break;
+
+    const cand = percentileOffset(total, fraction);
+    if (cand <= lo) continue;
+
+    const s = await sample(cand);
+    if (!s) {
+      partial = true;
+      break;
     }
+
+    if (s.ratio >= threshold) {
+      hi = cand;
+      break;
+    }
+    lo = cand;
   }
 
-  if (best === null) {
-    // Do not clobber Redis with 0 when no dense region was found.
-    return {
-      startOffset: await getStartOffset(),
-      total,
-      calls,
+  if (hi == null) {
+    // No dense region found (or budget died before one) — do not write 0 / EOF.
+    return done(await getStartOffset(), {
       partial: false,
       timedOut:
         timedOut ||
         elapsed() >= PROBE_BUDGET_MS ||
         calls >= PROBE_MAX_CALLS ||
         failures >= PROBE_MAX_FAILURES,
-      elapsedMs: elapsed(),
-    };
+    });
   }
 
-  // Coarse binary refine toward the density boundary.
-  let lo = 0;
-  while (lo + BINARY_STOP_GAP < best && withinBudget()) {
-    const mid = Math.floor((lo + best) / 2);
+  // Only early-write when hi is clearly left of near-EOF (a real mid-range hit).
+  const nearEof = percentileOffset(total, 1);
+  let refined = hi < nearEof;
+  if (refined) {
+    await setStartOffset(hi, total);
+  }
+
+  // --- 3. Bisect first dense offset ---
+  while (lo + BINARY_STOP_GAP < hi && withinBudget()) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (mid <= lo || mid >= hi) break;
+
     const s = await sample(mid);
     if (!s) {
       partial = true;
       break;
     }
-    if (s.ratio >= threshold) best = mid;
-    else lo = mid;
+
+    if (s.ratio >= threshold) {
+      hi = mid;
+      refined = true;
+      await setStartOffset(hi, total);
+    } else {
+      lo = mid;
+    }
   }
 
   if (!withinBudget()) {
     partial = true;
-    timedOut =
-      timedOut ||
-      elapsed() >= PROBE_BUDGET_MS ||
-      calls >= PROBE_MAX_CALLS ||
-      failures >= PROBE_MAX_FAILURES;
+    markBudgetExhausted();
   }
 
-  // Optional confirm when budget remains.
-  if (withinBudget()) {
-    const c1 = await sample(best);
-    if (c1 && withinBudget()) {
-      const c2 = await sample(best + PROBE_SAMPLE_LIMIT);
-      if (
-        (c1 && c1.ratio < threshold) ||
-        (c2 && c2.ratio < threshold)
-      ) {
-        best = Math.min(best + PROBE_SAMPLE_LIMIT * 2, Math.max(0, total - PROBE_SAMPLE_LIMIT));
-      }
-    } else {
-      partial = true;
-    }
-  } else {
-    partial = true;
+  if (!refined) {
+    // Only near-EOF was proven dense — too close to EOF to use as startOffset.
+    return done(await getStartOffset(), {
+      partial: false,
+      timedOut:
+        timedOut ||
+        elapsed() >= PROBE_BUDGET_MS ||
+        calls >= PROBE_MAX_CALLS ||
+        failures >= PROBE_MAX_FAILURES,
+    });
   }
 
-  // Final write (may equal early write; refreshes checkedAt).
-  await persistBest(best, total);
+  // Final persist (refreshes checkedAt even if hi unchanged).
+  await setStartOffset(hi, total);
 
-  // Early write without full refine counts as partial.
-  if (earlyWritten && partial === false) {
-    // Full path completed under budget — partial stays false.
-  } else if (earlyWritten && !withinBudget()) {
-    partial = true;
-  }
-
-  return {
-    startOffset: best,
-    total,
-    calls,
+  return done(hi, {
     partial,
     timedOut:
       timedOut ||
       elapsed() >= PROBE_BUDGET_MS ||
       calls >= PROBE_MAX_CALLS ||
       failures >= PROBE_MAX_FAILURES,
-    elapsedMs: elapsed(),
-  };
+  });
 }

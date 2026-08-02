@@ -64,7 +64,8 @@ export async function getAllTags(): Promise<Paginated<TagItem>> {
   return apiFetch("/v1/tags?limit=20000&offset=0", 0);
 }
 
-function isDisplayableGallery(gallery: GalleryListItem): boolean {
+/** Shared with start-offset probe so density matches list filtering. */
+export function isDisplayableGallery(gallery: GalleryListItem): boolean {
   return (
     (gallery.uploaded_images ?? 0) > 0 && Boolean(gallery.cover?.image_id)
   );

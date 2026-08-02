@@ -13,7 +13,9 @@ interface Props {
 export default async function GalleriesPage({ searchParams }: Props) {
   const params = await searchParams;
   const category = params.category || undefined;
-  const startOffset = await getStartOffset();
+  // Global startOffset is calibrated on unfiltered /v1/galleries only.
+  // Category density boundaries differ — start from head and let sparse scan work.
+  const startOffset = category ? 0 : await getStartOffset();
 
   let data = null;
   let categories: { name: string; gallery_count: number }[] = [];

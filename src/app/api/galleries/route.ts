@@ -9,12 +9,15 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const limit = Math.min(24, Math.max(1, parseInt(searchParams.get("limit") || "12", 10)));
   const rawOffset = searchParams.get("offset");
-  // If no offset provided, start from calibrated startOffset
+  const category = searchParams.get("category") || undefined;
+  // If no offset provided: unfiltered uses calibrated startOffset; category starts at 0
+  // (calibration is global-only; category dense boundaries differ).
   const offset =
     rawOffset !== null && rawOffset !== ""
       ? Math.max(0, parseInt(rawOffset, 10) || 0)
-      : await getStartOffset();
-  const category = searchParams.get("category") || undefined;
+      : category
+        ? 0
+        : await getStartOffset();
   try {
     const data = await getGalleries(limit, offset, category);
     return NextResponse.json(data, {
