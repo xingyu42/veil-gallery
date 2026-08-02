@@ -13,13 +13,20 @@ import type {
 import { USER_AGENT, upstreamUrl } from "./upstream";
 import { getUpstreamError } from "./upstream-error";
 
-async function apiFetch<T>(path: string, revalidateSeconds = 900): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  revalidateSeconds = 900,
+  opts?: { timeoutMs?: number }
+): Promise<T> {
   const res = await fetch(upstreamUrl(path), {
     next: { revalidate: revalidateSeconds },
     headers: {
       Accept: "application/json",
       "User-Agent": USER_AGENT,
     },
+    ...(opts?.timeoutMs
+      ? { signal: AbortSignal.timeout(opts.timeoutMs) }
+      : {}),
   });
   if (!res.ok) {
     const upstreamError = getUpstreamError(res.status);
@@ -67,6 +74,7 @@ function isDisplayableGallery(gallery: GalleryListItem): boolean {
  * Fetch galleries with uploaded covers.
  * Upstream pages can be sparse after filter, so scan multiple batches until
  * `limit` is filled, the list is exhausted, or maxScans is hit.
+ * Empty (non-displayable) streaks jump geometrically to escape sparse heads.
  */
 export async function getGalleries(
   limit = 24,
@@ -74,13 +82,15 @@ export async function getGalleries(
   category?: string
 ): Promise<Paginated<GalleryListItem> & { next_offset: number }> {
   const batchSize = Math.min(48, Math.max(limit * 2, limit));
-  const maxScans = 8;
+  const maxScans = 12;
+  const FETCH_TIMEOUT_MS = 8_000;
   const collected: GalleryListItem[] = [];
   const seen = new Set<number>();
   let cursor = Math.max(0, offset);
   let total = 0;
   let scans = 0;
   let exhausted = false;
+  let emptyStreak = 0;
   let lastData: Paginated<GalleryListItem> | null = null;
 
   while (collected.length < limit && scans < maxScans && !exhausted) {
@@ -92,7 +102,8 @@ export async function getGalleries(
 
     const data = await apiFetch<Paginated<GalleryListItem>>(
       `/v1/galleries?${params}`,
-      300
+      300,
+      { timeoutMs: FETCH_TIMEOUT_MS }
     );
     lastData = data;
     total = data.total;
@@ -104,6 +115,7 @@ export async function getGalleries(
       break;
     }
 
+    const beforeCount = collected.length;
     for (const gallery of raw) {
       if (seen.has(gallery.id)) continue;
       seen.add(gallery.id);
@@ -112,7 +124,16 @@ export async function getGalleries(
       if (collected.length >= limit) break;
     }
 
-    cursor += batchSize;
+    const added = collected.length - beforeCount;
+    if (added === 0) {
+      emptyStreak += 1;
+      const jumpMul = Math.min(2 ** (emptyStreak - 1), 16);
+      cursor += batchSize * jumpMul;
+    } else {
+      emptyStreak = 0;
+      cursor += batchSize;
+    }
+
     if (raw.length < batchSize || cursor >= total) {
       exhausted = true;
     }

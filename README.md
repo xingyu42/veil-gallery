@@ -40,8 +40,10 @@ UPSTASH_REDIS_REST_TOKEN=...
 # 可选：手动校准密钥（仅当设置了 CRON_SECRET 时，/api/calibrate-offset 才要 ?key=）
 # CRON_SECRET=your-secret
 
-# 可选：未校准前的启动偏移（默认 0，由 getGalleries 稀疏扫描兜底）
-# GALLERY_START_OFFSET=0
+# 推荐：首次成功调用 /api/calibrate-offset 后，把返回的 startOffset 配到生产。
+# 作为 Redis 未命中时的冷启动兜底，避免回退到 0（上游头部大量空图集）。
+# 0 仅是最后兜底；稀疏跳过 + 前端连续空页停止是缓解，不是 happy path。
+# GALLERY_START_OFFSET=<calibrated-startOffset>
 
 # 如未配置 Redis：限流失效保护（放行）；startOffset 仅进程内存，跨实例不共享
 ```

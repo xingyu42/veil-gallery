@@ -38,7 +38,9 @@ export async function GET(req: NextRequest) {
       bootstrap: getDefaultStartOffset(),
       redis: Boolean(getRedis()),
       source: isVercelCron ? "cron" : "manual",
-      note: "Offset stored in Upstash Redis (cross-instance) + process memory",
+      note: result.partial
+        ? "Partial calibration written; binary refine incomplete under budget"
+        : "Offset stored in Upstash Redis (cross-instance) + process memory",
     });
   } catch (e) {
     return upstreamJsonError(e, 500, "probe failed", {

@@ -7,6 +7,22 @@ import type { GalleryListItem, Paginated } from "@/lib/types";
 
 type Page = Paginated<GalleryListItem> & { next_offset?: number };
 
+const MAX_CONSECUTIVE_EMPTY = 3;
+const FETCH_TIMEOUT_MS = 20_000;
+
+function isTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const name = error.name.toLowerCase();
+  const message = error.message.toLowerCase();
+  return (
+    name === "timeouterror" ||
+    name === "aborterror" ||
+    message.includes("timeout") ||
+    message.includes("aborted") ||
+    message.includes("timed out")
+  );
+}
+
 export default function InfiniteGalleries({
   initial,
   category,
@@ -23,8 +39,12 @@ export default function InfiniteGalleries({
   const [hasMore, setHasMore] = useState(initial.has_next ?? true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stoppedReason, setStoppedReason] = useState<"end" | "empty" | null>(
+    null
+  );
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
+  const consecutiveEmptyRef = useRef(0);
   // Prefetched next page keyed by the offset it was fetched for
   const prefetchRef = useRef<{ offset: number; data: Page } | null>(null);
   const prefetchingRef = useRef(false);
@@ -48,7 +68,9 @@ export default function InfiniteGalleries({
       if (prefetchingRef.current) return;
       prefetchingRef.current = true;
       try {
-        const res = await fetch(buildUrl(forOffset));
+        const res = await fetch(buildUrl(forOffset), {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
         if (!res.ok) return;
         const data: Page = await res.json();
         prefetchRef.current = { offset: forOffset, data };
@@ -61,16 +83,40 @@ export default function InfiniteGalleries({
     [buildUrl, hasMore]
   );
 
-  const applyPage = useCallback((data: Page, currentOffset: number) => {
-    setItems((prev) => {
-      const ids = new Set(prev.map((g) => g.id));
-      return [...prev, ...data.items.filter((g) => !ids.has(g.id))];
-    });
-    const next = data.next_offset ?? currentOffset + pageSize;
-    setOffset(next);
-    setHasMore(data.has_next ?? next < data.total);
-    return next;
-  }, [pageSize]);
+  const applyPage = useCallback(
+    (data: Page, currentOffset: number) => {
+      setItems((prev) => {
+        const ids = new Set(prev.map((g) => g.id));
+        return [...prev, ...data.items.filter((g) => !ids.has(g.id))];
+      });
+
+      const next = data.next_offset ?? currentOffset + pageSize;
+      setOffset(next);
+
+      if (data.items.length === 0) {
+        consecutiveEmptyRef.current += 1;
+        if (consecutiveEmptyRef.current >= MAX_CONSECUTIVE_EMPTY) {
+          setHasMore(false);
+          setStoppedReason("empty");
+        } else {
+          const stillHasNext =
+            data.has_next ?? (Number.isFinite(data.total) ? next < data.total : true);
+          setHasMore(Boolean(stillHasNext));
+          if (!stillHasNext) setStoppedReason("end");
+        }
+      } else {
+        consecutiveEmptyRef.current = 0;
+        setStoppedReason(null);
+        const stillHasNext =
+          data.has_next ?? (Number.isFinite(data.total) ? next < data.total : true);
+        setHasMore(Boolean(stillHasNext));
+        if (!stillHasNext) setStoppedReason("end");
+      }
+
+      return next;
+    },
+    [pageSize]
+  );
 
   const loadMore = useCallback(async () => {
     if (loadingRef.current || !hasMore) return;
@@ -84,7 +130,9 @@ export default function InfiniteGalleries({
         data = hit.data;
         prefetchRef.current = null;
       } else {
-        const res = await fetch(buildUrl(offset));
+        const res = await fetch(buildUrl(offset), {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || `HTTP ${res.status}`);
@@ -95,12 +143,24 @@ export default function InfiniteGalleries({
       // Kick off prefetch for the page after this one
       void prefetchNext(next);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      if (isTimeoutError(e)) {
+        setError("加载超时，请重试");
+      } else {
+        setError(e instanceof Error ? e.message : "加载失败");
+      }
     } finally {
       setLoading(false);
       loadingRef.current = false;
     }
   }, [offset, hasMore, buildUrl, applyPage, prefetchNext]);
+
+  const resumeAfterEmptyStop = useCallback(() => {
+    consecutiveEmptyRef.current = 0;
+    setStoppedReason(null);
+    setHasMore(true);
+    setError(null);
+    void loadMore();
+  }, [loadMore]);
 
   // Prefetch next page as soon as we have a cursor
   useEffect(() => {
@@ -147,6 +207,8 @@ export default function InfiniteGalleries({
     setOffset(initial.next_offset ?? initial.offset + initial.items.length);
     setHasMore(initial.has_next ?? true);
     setError(null);
+    setStoppedReason(null);
+    consecutiveEmptyRef.current = 0;
     prefetchRef.current = null;
   }, [initial, category]);
 
@@ -176,12 +238,23 @@ export default function InfiniteGalleries({
           </button>
         </div>
       )}
-      {!loading && !hasMore && items.length > 0 && (
+      {!loading && !hasMore && stoppedReason === "empty" && (
+        <div className="py-6 text-center text-sm text-white/40">
+          暂时没有更多可展示的图集
+          <button
+            onClick={() => void resumeAfterEmptyStop()}
+            className="ml-3 text-accent underline"
+          >
+            继续尝试
+          </button>
+        </div>
+      )}
+      {!loading && !hasMore && items.length > 0 && stoppedReason !== "empty" && (
         <p className="py-6 text-center text-sm text-white/30">
           已经到底了 · 共 {items.length} 个图集
         </p>
       )}
-      {!loading && !hasMore && items.length === 0 && (
+      {!loading && !hasMore && items.length === 0 && stoppedReason !== "empty" && (
         <p className="py-12 text-center text-sm text-white/40">暂无可用图集</p>
       )}
     </div>

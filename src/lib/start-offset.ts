@@ -17,6 +17,16 @@ import { getUpstreamError } from "./upstream-error";
 const REDIS_KEY = "gallery:start_offset";
 const MEMORY_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
+/** Leave headroom under Vercel maxDuration=60 on calibrate-offset. */
+const PROBE_BUDGET_MS = 45_000;
+const PROBE_FETCH_TIMEOUT_MS = 3_500;
+const PROBE_MAX_CALLS = 14;
+const PROBE_SAMPLE_LIMIT = 10;
+const EXP_INITIAL_STEP = 5_000;
+const EXP_MAX_STEP = 50_000;
+const BINARY_STOP_GAP = 200;
+const PROBE_MAX_FAILURES = 3;
+
 type OffsetRecord = {
   offset: number;
   total: number;
@@ -130,6 +140,7 @@ async function fetchPage(offset: number, limit: number) {
         "User-Agent": USER_AGENT,
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(PROBE_FETCH_TIMEOUT_MS),
     }
   );
   if (!res.ok) {
@@ -149,64 +160,176 @@ function pageRatio(items: { uploaded_images?: number }[]) {
   return good / items.length;
 }
 
-/**
- * Exponential + binary probe. Expensive (~15–30 calls) — cron / manual only.
- */
-export async function probeStartOffset(threshold = 0.5): Promise<{
+export type ProbeResult = {
   startOffset: number;
   total: number;
   calls: number;
-}> {
-  let calls = 0;
-  const limit = 10;
+  partial: boolean;
+  timedOut: boolean;
+  elapsedMs: number;
+};
 
-  const sample = async (offset: number) => {
+/**
+ * Budgeted exponential + coarse binary probe.
+ * Early-writes the first dense candidate so a mid-run timeout still leaves Redis warm.
+ * Expensive — cron / manual only. Never writes 0 just because the probe failed.
+ */
+export async function probeStartOffset(threshold = 0.5): Promise<ProbeResult> {
+  const started = Date.now();
+  let calls = 0;
+  let failures = 0;
+  let best: number | null = null;
+  let total = 0;
+  let partial = false;
+  let timedOut = false;
+  let earlyWritten = false;
+
+  const elapsed = () => Date.now() - started;
+
+  const withinBudget = () =>
+    elapsed() < PROBE_BUDGET_MS &&
+    calls < PROBE_MAX_CALLS &&
+    failures < PROBE_MAX_FAILURES;
+
+  const sample = async (
+    offset: number
+  ): Promise<{ total: number; ratio: number } | null> => {
+    if (!withinBudget()) {
+      timedOut = elapsed() >= PROBE_BUDGET_MS || calls >= PROBE_MAX_CALLS;
+      return null;
+    }
     calls += 1;
-    const d = await fetchPage(offset, limit);
-    return { total: d.total, ratio: pageRatio(d.items || []) };
+    try {
+      const d = await fetchPage(offset, PROBE_SAMPLE_LIMIT);
+      return { total: d.total, ratio: pageRatio(d.items || []) };
+    } catch (error) {
+      failures += 1;
+      console.error("[start-offset] probe sample failed:", error);
+      if (failures >= PROBE_MAX_FAILURES) {
+        timedOut = true;
+      }
+      return null;
+    }
+  };
+
+  const persistBest = async (offset: number, tot: number) => {
+    await setStartOffset(offset, tot);
   };
 
   const first = await sample(0);
-  const total = first.total;
+  if (!first) {
+    return {
+      startOffset: await getStartOffset(),
+      total,
+      calls,
+      partial: false,
+      timedOut: true,
+      elapsedMs: elapsed(),
+    };
+  }
 
-  let found: number | null = null;
+  total = first.total;
+
   if (first.ratio >= threshold) {
-    found = 0;
+    best = 0;
+    await persistBest(best, total);
+    earlyWritten = true;
   } else {
     let hi = 0;
-    let step = 1000;
-    while (hi < total && calls < 20) {
-      const cand = Math.min(hi + step, Math.max(0, total - limit));
+    let step = EXP_INITIAL_STEP;
+    while (hi < total && withinBudget()) {
+      const cand = Math.min(hi + step, Math.max(0, total - PROBE_SAMPLE_LIMIT));
       if (cand === hi) break;
       const s = await sample(cand);
+      if (!s) break;
       if (s.ratio >= threshold) {
-        found = cand;
+        best = cand;
+        // Early write: survive budget/timeout after first dense hit.
+        await persistBest(best, total);
+        earlyWritten = true;
         break;
       }
       hi = cand;
-      step = Math.min(step * 2, 25000);
+      step = Math.min(step * 2, EXP_MAX_STEP);
     }
   }
 
-  if (found === null) {
-    return { startOffset: await getStartOffset(), total, calls };
+  if (best === null) {
+    // Do not clobber Redis with 0 when no dense region was found.
+    return {
+      startOffset: await getStartOffset(),
+      total,
+      calls,
+      partial: false,
+      timedOut:
+        timedOut ||
+        elapsed() >= PROBE_BUDGET_MS ||
+        calls >= PROBE_MAX_CALLS ||
+        failures >= PROBE_MAX_FAILURES,
+      elapsedMs: elapsed(),
+    };
   }
 
+  // Coarse binary refine toward the density boundary.
   let lo = 0;
-  let best = found;
-  while (lo + 20 < best && calls < 35) {
+  while (lo + BINARY_STOP_GAP < best && withinBudget()) {
     const mid = Math.floor((lo + best) / 2);
     const s = await sample(mid);
+    if (!s) {
+      partial = true;
+      break;
+    }
     if (s.ratio >= threshold) best = mid;
     else lo = mid;
   }
 
-  const c1 = await sample(best);
-  const c2 = await sample(best + limit);
-  if (c1.ratio < threshold || c2.ratio < threshold) {
-    best = Math.min(best + limit * 2, Math.max(0, total - limit));
+  if (!withinBudget()) {
+    partial = true;
+    timedOut =
+      timedOut ||
+      elapsed() >= PROBE_BUDGET_MS ||
+      calls >= PROBE_MAX_CALLS ||
+      failures >= PROBE_MAX_FAILURES;
   }
 
-  await setStartOffset(best, total);
-  return { startOffset: best, total, calls };
+  // Optional confirm when budget remains.
+  if (withinBudget()) {
+    const c1 = await sample(best);
+    if (c1 && withinBudget()) {
+      const c2 = await sample(best + PROBE_SAMPLE_LIMIT);
+      if (
+        (c1 && c1.ratio < threshold) ||
+        (c2 && c2.ratio < threshold)
+      ) {
+        best = Math.min(best + PROBE_SAMPLE_LIMIT * 2, Math.max(0, total - PROBE_SAMPLE_LIMIT));
+      }
+    } else {
+      partial = true;
+    }
+  } else {
+    partial = true;
+  }
+
+  // Final write (may equal early write; refreshes checkedAt).
+  await persistBest(best, total);
+
+  // Early write without full refine counts as partial.
+  if (earlyWritten && partial === false) {
+    // Full path completed under budget — partial stays false.
+  } else if (earlyWritten && !withinBudget()) {
+    partial = true;
+  }
+
+  return {
+    startOffset: best,
+    total,
+    calls,
+    partial,
+    timedOut:
+      timedOut ||
+      elapsed() >= PROBE_BUDGET_MS ||
+      calls >= PROBE_MAX_CALLS ||
+      failures >= PROBE_MAX_FAILURES,
+    elapsedMs: elapsed(),
+  };
 }
