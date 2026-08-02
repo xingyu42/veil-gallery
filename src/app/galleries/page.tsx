@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getGalleries, getCategories } from "@/lib/api";
-import { getCachedStartOffset } from "@/lib/start-offset";
+import { getStartOffset } from "@/lib/start-offset";
 import InfiniteGalleries from "@/components/InfiniteGalleries";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
@@ -13,7 +13,7 @@ interface Props {
 export default async function GalleriesPage({ searchParams }: Props) {
   const params = await searchParams;
   const category = params.category || undefined;
-  const startOffset = getCachedStartOffset();
+  const startOffset = await getStartOffset();
 
   let data = null;
   let categories: { name: string; gallery_count: number }[] = [];
@@ -76,7 +76,7 @@ export default async function GalleriesPage({ searchParams }: Props) {
           {describeUpstreamError(error, "源站限流中，请稍后再试")}
         </div>
       )}
-      {data && data.items.length > 0 ? (
+      {data && (data.items.length > 0 || data.has_next) ? (
         <InfiniteGalleries
           key={category || "all"}
           initial={data}

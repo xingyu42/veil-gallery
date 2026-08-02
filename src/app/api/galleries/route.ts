@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGalleries } from "@/lib/api";
-import { getCachedStartOffset } from "@/lib/start-offset";
+import { getStartOffset } from "@/lib/start-offset";
 import { upstreamJsonError } from "@/lib/upstream-error";
 
 export const revalidate = 300;
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const offset =
     rawOffset !== null && rawOffset !== ""
       ? Math.max(0, parseInt(rawOffset, 10) || 0)
-      : getCachedStartOffset();
+      : await getStartOffset();
   const category = searchParams.get("category") || undefined;
   try {
     const data = await getGalleries(limit, offset, category);

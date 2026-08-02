@@ -57,37 +57,79 @@ export async function getAllTags(): Promise<Paginated<TagItem>> {
   return apiFetch("/v1/tags?limit=20000&offset=0", 0);
 }
 
+function isDisplayableGallery(gallery: GalleryListItem): boolean {
+  return (
+    (gallery.uploaded_images ?? 0) > 0 && Boolean(gallery.cover?.image_id)
+  );
+}
+
+/**
+ * Fetch galleries with uploaded covers.
+ * Upstream pages can be sparse after filter, so scan multiple batches until
+ * `limit` is filled, the list is exhausted, or maxScans is hit.
+ */
 export async function getGalleries(
   limit = 24,
   offset = 0,
   category?: string
 ): Promise<Paginated<GalleryListItem> & { next_offset: number }> {
-  const fetchLimit = Math.min(48, Math.max(limit * 2, limit));
-  const params = new URLSearchParams({
-    limit: String(fetchLimit),
-    offset: String(offset),
-  });
-  if (category) params.set("category", category);
+  const batchSize = Math.min(48, Math.max(limit * 2, limit));
+  const maxScans = 8;
+  const collected: GalleryListItem[] = [];
+  const seen = new Set<number>();
+  let cursor = Math.max(0, offset);
+  let total = 0;
+  let scans = 0;
+  let exhausted = false;
+  let lastData: Paginated<GalleryListItem> | null = null;
 
-  const data = await apiFetch<Paginated<GalleryListItem>>(
-    `/v1/galleries?${params}`,
-    300
-  );
-  const items = (data.items || [])
-    .filter((gallery) => {
-      return (
-        (gallery.uploaded_images ?? 0) > 0 && Boolean(gallery.cover?.image_id)
-      );
-    })
-    .slice(0, limit);
-  const nextOffset = offset + fetchLimit;
+  while (collected.length < limit && scans < maxScans && !exhausted) {
+    const params = new URLSearchParams({
+      limit: String(batchSize),
+      offset: String(cursor),
+    });
+    if (category) params.set("category", category);
+
+    const data = await apiFetch<Paginated<GalleryListItem>>(
+      `/v1/galleries?${params}`,
+      300
+    );
+    lastData = data;
+    total = data.total;
+    scans += 1;
+
+    const raw = data.items || [];
+    if (raw.length === 0) {
+      exhausted = true;
+      break;
+    }
+
+    for (const gallery of raw) {
+      if (seen.has(gallery.id)) continue;
+      seen.add(gallery.id);
+      if (!isDisplayableGallery(gallery)) continue;
+      collected.push(gallery);
+      if (collected.length >= limit) break;
+    }
+
+    cursor += batchSize;
+    if (raw.length < batchSize || cursor >= total) {
+      exhausted = true;
+    }
+  }
+
+  const nextOffset = cursor;
+  const hasNext = !exhausted && nextOffset < total;
 
   return {
-    ...data,
-    items,
+    items: collected,
+    total: lastData?.total ?? total,
     limit,
     offset,
-    has_next: nextOffset < data.total,
+    page: lastData?.page,
+    total_pages: lastData?.total_pages,
+    has_prev: offset > 0,
+    has_next: hasNext,
     next_offset: nextOffset,
   };
 }

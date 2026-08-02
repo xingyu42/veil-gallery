@@ -1,5 +1,5 @@
-import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
+import { getRedis } from "./redis";
 
 /**
  * Per-region rate limiter for upstream image fetches.
@@ -22,17 +22,13 @@ let ratelimit: Ratelimit | null = null;
 function getRatelimiter() {
   if (ratelimit) return ratelimit;
 
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!url || !token) {
+  const redis = getRedis();
+  if (!redis) {
     console.warn(
       "[rate-limit] UPSTASH_REDIS_REST_URL/TOKEN not set — rate limiting DISABLED"
     );
     return null;
   }
-
-  const redis = new Redis({ url, token });
 
   ratelimit = new Ratelimit({
     redis,

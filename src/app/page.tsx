@@ -5,7 +5,7 @@ import {
   getFeaturedTags,
   getGalleries,
 } from "@/lib/api";
-import { getCachedStartOffset } from "@/lib/start-offset";
+import { getStartOffset } from "@/lib/start-offset";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import FeaturedBar from "@/components/FeaturedBar";
 import GalleryCard from "@/components/GalleryCard";
@@ -25,7 +25,7 @@ export default async function HomePage({ searchParams }: Props) {
     redirect(`/galleries?category=${encodeURIComponent(legacyCategory)}`);
   }
 
-  const startOffset = getCachedStartOffset();
+  const startOffset = await getStartOffset();
 
   let config = null;
   let featuredTags: { id: number; name: string; normalized_name: string }[] = [];

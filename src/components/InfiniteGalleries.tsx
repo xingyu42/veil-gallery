@@ -181,7 +181,7 @@ export default function InfiniteGalleries({
           已经到底了 · 共 {items.length} 个图集
         </p>
       )}
-      {!loading && items.length === 0 && (
+      {!loading && !hasMore && items.length === 0 && (
         <p className="py-12 text-center text-sm text-white/40">暂无可用图集</p>
       )}
     </div>
