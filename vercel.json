@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/calibrate-offset",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
