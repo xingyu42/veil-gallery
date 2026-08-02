@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { imageUrl } from "@/lib/api";
+import RemoteImage from "./RemoteImage";
 import Masonry from "./Masonry";
 import Lightbox from "./Lightbox";
 import type { GalleryImage } from "@/lib/types";
@@ -37,14 +37,10 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
             onClick={() => setActiveIndex(index)}
             className="group relative mb-4 block w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 ring-1 ring-white/10 transition hover:ring-[#c9a87c]/40"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl(image.id)}
+            <RemoteImage
+              id={image.id}
               alt={`${tagName} #${index + 1}`}
               className="w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
             />
           </button>
         ))}

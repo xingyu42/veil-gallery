@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGalleryImages } from "@/lib/api";
+import { getUpstreamHttpStatus } from "@/lib/upstream-error";
 
 export const revalidate = 300;
 
@@ -42,7 +43,7 @@ export async function GET(
     const message = error instanceof Error ? error.message : "加载失败";
     return NextResponse.json(
       { error: message },
-      { status: message === "RATE_LIMIT" ? 429 : 502 }
+      { status: getUpstreamHttpStatus(message, 502) }
     );
   }
 }

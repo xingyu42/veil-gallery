@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { imageUrl } from "@/lib/api";
+import RemoteImage from "./RemoteImage";
 import type { GalleryImage } from "@/lib/types";
 
 interface Props {
@@ -123,17 +123,15 @@ export default function Lightbox({
             <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#c9a87c]/30 border-t-[#c9a87c]" />
           </div>
         )}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <RemoteImage
           key={current.id}
-          src={imageUrl(current.id)}
+          id={current.id}
           alt={`${title} #${current.sort_order}`}
-          className={`max-h-[92vh] max-w-full select-none object-contain shadow-2xl transition-opacity duration-200 ${
-            loadedId === current.id ? "opacity-100" : "opacity-0"
-          }`}
+          className="max-h-[92vh] max-w-full select-none object-contain shadow-2xl"
+          placeholderClassName="h-full w-full"
           draggable={false}
-          referrerPolicy="no-referrer"
           onLoad={() => setLoadedId(current.id)}
+          onError={() => setLoadedId(current.id)}
         />
       </div>
 

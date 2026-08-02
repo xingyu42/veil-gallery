@@ -4,6 +4,7 @@ import {
   getCachedStartOffset,
   getDefaultStartOffset,
 } from "@/lib/start-offset";
+import { getUpstreamHttpStatus } from "@/lib/upstream-error";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -35,13 +36,14 @@ export async function GET(req: NextRequest) {
       note: "Offset cached in-memory on this instance; default used as cross-instance fallback",
     });
   } catch (e) {
+    const message = e instanceof Error ? e.message : "probe failed";
     return NextResponse.json(
       {
-        error: e instanceof Error ? e.message : "probe failed",
+        error: message,
         fallback: getCachedStartOffset(),
         default: getDefaultStartOffset(),
       },
-      { status: 500 }
+      { status: getUpstreamHttpStatus(message, 500) }
     );
   }
 }

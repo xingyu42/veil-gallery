@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import GalleryCard from "./GalleryCard";
-import Masonry from "./Masonry";
+import { describeUpstreamError } from "@/lib/upstream-error";
 import type { GalleryListItem, Paginated } from "@/lib/types";
 
 type Page = Paginated<GalleryListItem> & { next_offset?: number };
@@ -152,11 +152,11 @@ export default function InfiniteGalleries({
 
   return (
     <div>
-      <Masonry>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {items.map((g) => (
           <GalleryCard key={g.id} gallery={g} />
         ))}
-      </Masonry>
+      </div>
       <div
         ref={sentinelRef}
         className="flex min-h-24 items-center justify-center py-6"
@@ -167,7 +167,7 @@ export default function InfiniteGalleries({
       </div>
       {error && (
         <div className="py-4 text-center text-sm text-red-400">
-          {error === "RATE_LIMIT" ? "源站限流中，请稍后再试" : error}
+          {describeUpstreamError(error, "源站限流中，请稍后再试")}
           <button
             onClick={() => void loadMore()}
             className="ml-3 text-[#c9a87c] underline"

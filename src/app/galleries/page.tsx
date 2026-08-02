@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getGalleries, getCategories } from "@/lib/api";
 import { getCachedStartOffset } from "@/lib/start-offset";
 import InfiniteGalleries from "@/components/InfiniteGalleries";
+import { describeUpstreamError } from "@/lib/upstream-error";
 
 export const revalidate = 300;
 
@@ -69,7 +70,7 @@ export default async function GalleriesPage({ searchParams }: Props) {
       </div>
       {error && (
         <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-200">
-          {error === "RATE_LIMIT" ? "源站限流中，请稍后再试" : error}
+          {describeUpstreamError(error, "源站限流中，请稍后再试")}
         </div>
       )}
       {data && data.items.length > 0 ? (

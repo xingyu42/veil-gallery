@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getGallery } from "@/lib/api";
 import GalleryImages from "@/components/GalleryImages";
 import type { Metadata } from "next";
+import { describeUpstreamError } from "@/lib/upstream-error";
 
 export const revalidate = 3600;
 
@@ -41,9 +42,10 @@ export default async function GalleryPage({ params }: Props) {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
       {error && (
         <div className="mb-8 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
-          {error === "RATE_LIMIT"
-            ? "接口限流或 IP 暂时被封，请稍后再试（约 30 分钟）。"
-            : error}
+          {describeUpstreamError(
+            error,
+            "源站接口限流，请稍后再试（约 30 分钟）"
+          )}
         </div>
       )}
 

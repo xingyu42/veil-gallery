@@ -6,6 +6,10 @@ import {
   getCategories,
 } from "@/lib/api";
 import { getCachedStartOffset } from "@/lib/start-offset";
+import {
+  UPSTREAM_FORBIDDEN,
+  UPSTREAM_RATE_LIMIT,
+} from "@/lib/upstream-error";
 import FeaturedBar from "@/components/FeaturedBar";
 import InfiniteGalleries from "@/components/InfiniteGalleries";
 
@@ -63,8 +67,10 @@ export default async function HomePage({ searchParams }: Props) {
 
       {error && (
         <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-200">
-          {error === "RATE_LIMIT"
+          {error === UPSTREAM_RATE_LIMIT
             ? "源站接口限流，请稍后再试（约 30 分钟）"
+            : error === UPSTREAM_FORBIDDEN
+              ? "源站拒绝访问，请稍后再试"
             : `加载出错：${error}`}
         </div>
       )}

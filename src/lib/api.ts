@@ -10,6 +10,7 @@ import type {
   FeaturedTag,
   ImageMeta,
 } from "./types";
+import { getUpstreamError } from "./upstream-error";
 
 const API_BASE = "https://veil.ortlinde.com";
 
@@ -22,9 +23,8 @@ async function apiFetch<T>(path: string, revalidateSeconds = 900): Promise<T> {
     },
   });
   if (!res.ok) {
-    if (res.status === 429 || res.status === 403) {
-      throw new Error("RATE_LIMIT");
-    }
+    const upstreamError = getUpstreamError(res.status);
+    if (upstreamError) throw upstreamError;
     throw new Error(`API ${res.status}: ${path}`);
   }
   return res.json() as Promise<T>;
@@ -156,57 +156,38 @@ export async function getGalleryImages(
   const safeOffset = Math.max(0, offset);
   const safeLimit = Math.min(40, Math.max(1, limit));
   const safeAfterSortOrder = Math.max(0, afterSortOrder);
-  const page = Math.floor(safeOffset / safeLimit) + 1;
-  const expandedLimit = Math.min(500, safeOffset + safeLimit);
-
-  // The public API has had more than one gallery-image pagination shape.
-  // Try the least expensive/current forms first and validate by sort_order,
-  // so an endpoint that silently ignores offset cannot duplicate page one.
-  const paths = [
-    `/v1/gallery/${id}?limit=${safeLimit}&offset=${safeOffset}`,
-    `/v1/gallery/${id}?limit=${expandedLimit}&offset=0`,
+  // The upstream OpenAPI exposes image_limit/image_offset; limit/offset is ignored.
+  const payload = await apiFetch<unknown>(
     `/v1/gallery/${id}?image_limit=${safeLimit}&image_offset=${safeOffset}`,
-    `/v1/gallery/${id}/images?limit=${safeLimit}&offset=${safeOffset}`,
-    `/v1/gallery/${id}/images?page=${page}&limit=${safeLimit}`,
-  ];
-
-  let lastError: Error | null = null;
-
-  for (const path of paths) {
-    try {
-      const payload = await apiFetch<unknown>(path, 300);
-      const allImages = availableImages(normalizeImages(payload));
-      const total = getImageTotal(
-        payload,
-        Math.max(expectedTotal, safeOffset, allImages.length)
-      );
-
-      const ordered = allImages.filter((image, index) => {
-        if (typeof image.sort_order === "number" && image.sort_order > 0) {
-          return image.sort_order > safeAfterSortOrder;
-        }
-        return index >= safeOffset;
-      });
-      const items = ordered.slice(0, safeLimit);
-
-      if (items.length > 0 || safeOffset >= total) {
-        const nextOffset = safeOffset + items.length;
-        return {
-          items,
-          total,
-          offset: safeOffset,
-          limit: safeLimit,
-          next_offset: nextOffset,
-          has_more: nextOffset < total,
-        };
+    300
+  );
+  const allImages = availableImages(normalizeImages(payload));
+  const total = getImageTotal(
+    payload,
+    Math.max(expectedTotal, safeOffset, allImages.length)
+  );
+  const items = allImages
+    .filter((image) => {
+      if (typeof image.sort_order === "number" && image.sort_order > 0) {
+        return image.sort_order > safeAfterSortOrder;
       }
-    } catch (error) {
-      if (error instanceof Error && error.message === "RATE_LIMIT") throw error;
-      lastError = error instanceof Error ? error : new Error("加载失败");
-    }
+      return true;
+    })
+    .slice(0, safeLimit);
+
+  if (items.length === 0 && safeOffset < total) {
+    throw new Error("源站没有返回新的图片");
   }
 
-  throw lastError ?? new Error("源站暂未提供后续图片分页");
+  const nextOffset = safeOffset + items.length;
+  return {
+    items,
+    total,
+    offset: safeOffset,
+    limit: safeLimit,
+    next_offset: nextOffset,
+    has_more: nextOffset < total,
+  };
 }
 
 export async function getImageMeta(
@@ -222,5 +203,5 @@ export async function getTagPreview(
 }
 
 export function imageUrl(id: number | string): string {
-  return `${API_BASE}/v1/image/${id}`;
+  return `/api/image/${id}`;
 }

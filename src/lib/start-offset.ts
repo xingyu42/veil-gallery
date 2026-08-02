@@ -1,3 +1,5 @@
+import { getUpstreamError } from "./upstream-error";
+
 /**
  * startOffset: upstream /v1/galleries offset where uploaded images become available.
  * Verified 2026-08-02: ~75797 (ids ≈ 22650), ratio 100% for consecutive pages.
@@ -40,7 +42,8 @@ async function fetchPage(offset: number, limit: number) {
     }
   );
   if (!res.ok) {
-    if (res.status === 429 || res.status === 403) throw new Error("RATE_LIMIT");
+    const upstreamError = getUpstreamError(res.status);
+    if (upstreamError) throw upstreamError;
     throw new Error(`API ${res.status}`);
   }
   return res.json() as Promise<{

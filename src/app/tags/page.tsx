@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTags } from "@/lib/api";
 import TagPill from "@/components/TagPill";
+import { describeUpstreamError } from "@/lib/upstream-error";
 
 export const revalidate = 900;
 
@@ -67,7 +68,7 @@ export default async function TagsPage({ searchParams }: Props) {
 
       {error && (
         <div className="mb-8 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
-          {error === "RATE_LIMIT" ? "接口限流中，请稍后再试" : error}
+          {describeUpstreamError(error, "接口限流中，请稍后再试")}
         </div>
       )}
 

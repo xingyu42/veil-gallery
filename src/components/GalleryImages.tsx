@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Masonry from "./Masonry";
-import SafeImage from "./SafeImage";
+import RemoteImage from "./RemoteImage";
 import Lightbox from "./Lightbox";
 import type { GalleryDetail, GalleryImage, GalleryImagePage } from "@/lib/types";
+import { describeUpstreamError } from "@/lib/upstream-error";
 
 const PAGE_SIZE = 20;
 
@@ -66,7 +67,8 @@ export default function GalleryImages({ gallery }: Props) {
       setHasMore(data.has_more && offset + fresh.length < total);
       return fresh.length;
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "后续图片加载失败";
+      const rawMessage = caught instanceof Error ? caught.message : "后续图片加载失败";
+      const message = describeUpstreamError(rawMessage, "源站限流中，请稍后再试");
       setError(message);
       return 0;
     } finally {
@@ -128,7 +130,7 @@ export default function GalleryImages({ gallery }: Props) {
             className="group relative mb-3 block w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-[#c9a87c]/40 focus:outline-none focus:ring-2 focus:ring-[#c9a87c]/60"
             aria-label={`放大查看 ${gallery.title} 第 ${image.sort_order} 张`}
           >
-            <SafeImage
+            <RemoteImage
               id={image.id}
               alt={`${gallery.title} #${image.sort_order}`}
               className="w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-95"

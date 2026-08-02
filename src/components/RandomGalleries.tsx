@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import GalleryCard from "./GalleryCard";
+import { describeUpstreamError } from "@/lib/upstream-error";
 import Masonry from "./Masonry";
 import type { GalleryListItem } from "@/lib/types";
 
@@ -203,7 +204,7 @@ export default function RandomGalleries({
 
       {error && (
         <div className="py-4 text-center text-sm text-red-400">
-          {error === "RATE_LIMIT" ? "源站限流中，请稍后再试（约30分钟）" : error}
+          {describeUpstreamError(error, "源站限流中，请稍后再试（约30分钟）")}
           <button onClick={resume} className="ml-3 text-[#c9a87c] underline">
             重试
           </button>

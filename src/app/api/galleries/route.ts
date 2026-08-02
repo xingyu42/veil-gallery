@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGalleries } from "@/lib/api";
 import { getCachedStartOffset } from "@/lib/start-offset";
+import { getUpstreamHttpStatus } from "@/lib/upstream-error";
 
 export const revalidate = 300;
 
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     const message = e instanceof Error ? e.message : "error";
     return NextResponse.json(
       { error: message },
-      { status: message === "RATE_LIMIT" ? 429 : 500 }
+      { status: getUpstreamHttpStatus(message, 500) }
     );
   }
 }
