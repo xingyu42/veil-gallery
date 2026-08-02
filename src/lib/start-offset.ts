@@ -19,8 +19,10 @@ const MEMORY_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
 /** Leave headroom under Vercel maxDuration=60 on calibrate-offset. */
 const PROBE_BUDGET_MS = 45_000;
-const PROBE_FETCH_TIMEOUT_MS = 3_500;
-const PROBE_MAX_CALLS = 14;
+// Upstream large offsets often take 5–8s (measured ~7.4s at offset=50k); 3.5s was too tight.
+const PROBE_FETCH_TIMEOUT_MS = 12_000;
+// Wall budget dominates: ~8 × 12s worst-case still exits via PROBE_BUDGET_MS.
+const PROBE_MAX_CALLS = 8;
 const PROBE_SAMPLE_LIMIT = 10;
 const EXP_INITIAL_STEP = 5_000;
 const EXP_MAX_STEP = 50_000;
@@ -204,7 +206,17 @@ export async function probeStartOffset(threshold = 0.5): Promise<ProbeResult> {
       return { total: d.total, ratio: pageRatio(d.items || []) };
     } catch (error) {
       failures += 1;
-      console.error("[start-offset] probe sample failed:", error);
+      const isTimeout =
+        error instanceof Error &&
+        (error.name === "TimeoutError" ||
+          error.name === "AbortError" ||
+          /timeout|aborted/i.test(error.message));
+      console.error(
+        `[start-offset] probe sample failed at offset=${offset}` +
+          (isTimeout ? " (timeout)" : "") +
+          ` failures=${failures}/${PROBE_MAX_FAILURES}:`,
+        isTimeout ? error.message : error
+      );
       if (failures >= PROBE_MAX_FAILURES) {
         timedOut = true;
       }

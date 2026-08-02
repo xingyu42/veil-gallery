@@ -83,7 +83,8 @@ export async function getGalleries(
 ): Promise<Paginated<GalleryListItem> & { next_offset: number }> {
   const batchSize = Math.min(48, Math.max(limit * 2, limit));
   const maxScans = 12;
-  const FETCH_TIMEOUT_MS = 8_000;
+  // Align with upstream latency at large offsets (measured ~7.4s at offset=50k).
+  const FETCH_TIMEOUT_MS = 12_000;
   const collected: GalleryListItem[] = [];
   const seen = new Set<number>();
   let cursor = Math.max(0, offset);
