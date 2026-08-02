@@ -171,7 +171,7 @@ export default function RandomGalleries({
           type="button"
           onClick={() => void reshuffle()}
           disabled={loading}
-          className="rounded-full bg-[#c9a87c]/20 px-4 py-2 text-sm text-[#e0c9a0] ring-1 ring-[#c9a87c]/40 transition hover:bg-[#c9a87c]/30 disabled:opacity-50"
+          className="rounded-full bg-accent/10 px-4 py-2 text-sm text-accent ring-1 ring-accent/40 transition hover:ring-accent/70 disabled:opacity-50"
         >
           换一批
         </button>
@@ -189,13 +189,13 @@ export default function RandomGalleries({
         className="flex min-h-24 items-center justify-center py-6"
       >
         {loading && (
-          <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#c9a87c]/30 border-t-[#c9a87c]" />
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
         )}
         {!loading && paused && (
           <button
             type="button"
             onClick={resume}
-            className="text-sm text-[#c9a87c] underline"
+            className="text-sm text-accent underline"
           >
             继续加载
           </button>
@@ -203,9 +203,9 @@ export default function RandomGalleries({
       </div>
 
       {error && (
-        <div className="py-4 text-center text-sm text-red-400">
+        <div className="py-4 text-center text-sm text-status-danger">
           {describeUpstreamError(error, "源站限流中，请稍后再试（约30分钟）")}
-          <button onClick={resume} className="ml-3 text-[#c9a87c] underline">
+          <button onClick={resume} className="ml-3 text-accent underline">
             重试
           </button>
         </div>

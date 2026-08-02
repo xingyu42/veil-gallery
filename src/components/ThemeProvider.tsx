@@ -21,36 +21,31 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("veil-theme") as Theme | null;
-    const preferred =
-      stored ||
-      (window.matchMedia("(prefers-color-scheme: light)").matches
-        ? "light"
-        : "dark");
+    const preferred = document.documentElement.classList.contains("light")
+      ? "light"
+      : "dark";
     setThemeState(preferred);
-    document.documentElement.classList.toggle("light", preferred === "light");
-    document.documentElement.classList.toggle("dark", preferred === "dark");
-    setMounted(true);
   }, []);
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
-    localStorage.setItem("veil-theme", t);
+    try {
+      localStorage.setItem("veil-theme", t);
+    } catch {
+      // Theme switching still works when storage is unavailable.
+    }
     document.documentElement.classList.toggle("light", t === "light");
     document.documentElement.classList.toggle("dark", t === "dark");
   }, []);
 
   const toggle = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  }, [theme, setTheme]);
-
-  // Avoid hydration mismatch flash
-  if (!mounted) {
-    return <>{children}</>;
-  }
+    const current = document.documentElement.classList.contains("light")
+      ? "light"
+      : "dark";
+    setTheme(current === "dark" ? "light" : "dark");
+  }, [setTheme]);
 
   return (
     <ThemeContext.Provider value={{ theme, toggle, setTheme }}>

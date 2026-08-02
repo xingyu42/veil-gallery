@@ -162,15 +162,15 @@ export default function InfiniteGalleries({
         className="flex min-h-24 items-center justify-center py-6"
       >
         {loading && (
-          <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#c9a87c]/30 border-t-[#c9a87c]" />
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
         )}
       </div>
       {error && (
-        <div className="py-4 text-center text-sm text-red-400">
+        <div className="py-4 text-center text-sm text-status-danger">
           {describeUpstreamError(error, "源站限流中，请稍后再试")}
           <button
             onClick={() => void loadMore()}
-            className="ml-3 text-[#c9a87c] underline"
+            className="ml-3 text-accent underline"
           >
             重试
           </button>

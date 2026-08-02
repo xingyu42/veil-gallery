@@ -5,6 +5,23 @@ import Footer from "@/components/Footer";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
+const themeInitScript = `
+  (() => {
+    const root = document.documentElement;
+    let theme = "dark";
+    try {
+      const stored = localStorage.getItem("veil-theme");
+      theme = stored === "light" || stored === "dark"
+        ? stored
+        : (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    } catch {
+      theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    root.classList.remove("light", "dark");
+    root.classList.add(theme);
+  })();
+`;
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -46,6 +63,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} dark h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="flex min-h-full flex-col bg-background text-foreground">
         <ThemeProvider>
           <Header />

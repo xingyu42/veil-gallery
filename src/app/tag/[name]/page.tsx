@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getTagPreview } from "@/lib/api";
 import TagPreviewImages from "@/components/TagPreviewImages";
 import type { Metadata } from "next";
-import { describeUpstreamError } from "@/lib/upstream-error";
+import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
 export const revalidate = 1800;
 
@@ -30,7 +30,7 @@ export default async function TagPage({ params }: Props) {
     const res = await getTagPreview(decoded);
     imageIds = res.image_ids || [];
   } catch (e) {
-    error = e instanceof Error ? e.message : "加载失败";
+    error = getErrorMessage(e, "加载失败");
   }
 
   return (
@@ -38,12 +38,12 @@ export default async function TagPage({ params }: Props) {
       <div className="mb-8">
         <Link
           href="/tags"
-          className="mb-4 inline-block text-sm text-white/40 transition hover:text-[#c9a87c]"
+          className="mb-4 inline-block text-sm text-white/40 transition hover:text-accent"
         >
           ← 返回标签列表
         </Link>
         <h1 className="font-serif text-3xl tracking-wide text-white">
-          <span className="text-[#c9a87c]">#</span>
+          <span className="text-accent">#</span>
           {decoded}
         </h1>
         <p className="mt-2 text-sm text-white/40">
@@ -52,7 +52,7 @@ export default async function TagPage({ params }: Props) {
       </div>
 
       {error && (
-        <div className="mb-8 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+        <div className="mb-8 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-status-danger">
           {describeUpstreamError(error, "此接口限流较严，请稍后再试")}
         </div>
       )}
@@ -73,7 +73,7 @@ export default async function TagPage({ params }: Props) {
         </p>
         <Link
           href="/galleries"
-          className="mt-4 inline-block rounded-full border border-[#c9a87c]/40 px-6 py-2.5 text-sm text-[#c9a87c] transition hover:bg-[#c9a87c]/10"
+          className="mt-4 inline-block rounded-full border border-accent/40 px-6 py-2.5 text-sm text-accent transition hover:bg-accent/10"
         >
           浏览全部图集
         </Link>

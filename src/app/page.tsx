@@ -1,17 +1,15 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   getSiteConfig,
   getFeaturedTags,
   getGalleries,
-  getCategories,
 } from "@/lib/api";
 import { getCachedStartOffset } from "@/lib/start-offset";
-import {
-  UPSTREAM_FORBIDDEN,
-  UPSTREAM_RATE_LIMIT,
-} from "@/lib/upstream-error";
+import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import FeaturedBar from "@/components/FeaturedBar";
-import InfiniteGalleries from "@/components/InfiniteGalleries";
+import GalleryCard from "@/components/GalleryCard";
+import Masonry from "@/components/Masonry";
 
 export const revalidate = 300;
 
@@ -21,28 +19,30 @@ interface Props {
 
 export default async function HomePage({ searchParams }: Props) {
   const params = await searchParams;
-  const category = params.category || undefined;
+  const legacyCategory = params.category?.trim();
+
+  if (legacyCategory) {
+    redirect(`/galleries?category=${encodeURIComponent(legacyCategory)}`);
+  }
+
   const startOffset = getCachedStartOffset();
 
   let config = null;
   let featuredTags: { id: number; name: string; normalized_name: string }[] = [];
   let galleries = null;
-  let categories: { name: string; gallery_count: number }[] = [];
   let error: string | null = null;
 
   try {
-    const [cfg, tags, gals, cats] = await Promise.all([
+    const [cfg, tags, gals] = await Promise.all([
       getSiteConfig(),
       getFeaturedTags(),
-      getGalleries(12, startOffset, category),
-      getCategories(),
+      getGalleries(12, startOffset),
     ]);
     config = cfg;
     featuredTags = tags.items || [];
     galleries = gals;
-    categories = cats.items || [];
   } catch (e) {
-    error = e instanceof Error ? e.message : "加载失败";
+    error = getErrorMessage(e, "加载失败");
   }
 
   const featuredCategories = config?.featured_categories || [];
@@ -50,28 +50,45 @@ export default async function HomePage({ searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
-      <section className="mb-10 text-center">
-        <h1 className="font-serif text-4xl font-medium tracking-tight text-white sm:text-5xl">
-          <span className="text-[#c9a87c]">Veil</span> Gallery
+      <section className="relative mb-12 overflow-hidden border-y border-white/10 py-12 text-center sm:py-16">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,var(--hero-glow),transparent_58%)]" />
+        <p className="relative mb-4 text-[10px] tracking-[0.4em] text-accent">
+          CURATED PHOTOGRAPHY
+        </p>
+        <h1 className="relative font-serif text-4xl font-medium tracking-tight text-white sm:text-6xl">
+          <span className="text-accent">Veil</span> Gallery
         </h1>
-        <p className="mx-auto mt-4 max-w-xl text-base text-white/50">
-          现代时尚写真 · 瀑布流浏览 · 精选分类与标签
+        <p className="relative mx-auto mt-4 max-w-2xl text-base leading-7 text-white/50">
+          现代时尚写真 · 精选分类与标签
         </p>
         {scale && (
-          <p className="mt-3 text-xs text-white/30">
+          <p className="relative mt-4 text-xs text-white/30">
             {scale.galleries.toLocaleString()} 图集 · {scale.images.toLocaleString()}{" "}
             图片 · {scale.tags.toLocaleString()} 标签
           </p>
         )}
+        <div className="relative mt-7 flex flex-wrap justify-center gap-3">
+          <Link
+            href="/galleries"
+            className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition hover:brightness-110"
+          >
+            浏览全部图集
+          </Link>
+          <Link
+            href="/tags"
+            className="rounded-full border border-white/15 px-5 py-2.5 text-sm text-white/70 transition hover:border-accent/50 hover:text-accent"
+          >
+            按标签发现
+          </Link>
+        </div>
       </section>
 
       {error && (
-        <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-200">
-          {error === UPSTREAM_RATE_LIMIT
-            ? "源站接口限流，请稍后再试（约 30 分钟）"
-            : error === UPSTREAM_FORBIDDEN
-              ? "源站拒绝访问，请稍后再试"
-            : `加载出错：${error}`}
+        <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-status-warning">
+          {describeUpstreamError(
+            error,
+            "源站接口限流，请稍后再试（约 30 分钟）"
+          )}
         </div>
       )}
 
@@ -81,54 +98,29 @@ export default async function HomePage({ searchParams }: Props) {
         </div>
       )}
 
-      {categories.length > 0 && (
-        <div className="mb-8 flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-xs tracking-widest text-[#c9a87c]/70">筛选</span>
-          <Link
-            href="/"
-            className={`rounded-full px-3 py-1.5 text-sm transition ${
-              !category
-                ? "bg-[#c9a87c]/20 text-[#e0c9a0] ring-1 ring-[#c9a87c]/40"
-                : "bg-white/5 text-white/60 hover:bg-white/10"
-            }`}
-          >
-            全部
-          </Link>
-          {categories.map((c) => (
-            <Link
-              key={c.name}
-              href={`/?category=${encodeURIComponent(c.name)}`}
-              className={`rounded-full px-3 py-1.5 text-sm transition ${
-                category === c.name
-                  ? "bg-[#c9a87c]/20 text-[#e0c9a0] ring-1 ring-[#c9a87c]/40"
-                  : "bg-white/5 text-white/60 hover:bg-white/10"
-              }`}
-            >
-              {c.name}
-            </Link>
-          ))}
-        </div>
-      )}
-
       <section>
-        <div className="mb-6 flex items-end justify-between">
-          <h2 className="font-serif text-xl tracking-wide text-white/90">
-            {category ? `${category} 图集` : "图集瀑布流"}
-          </h2>
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <div>
+            <p className="mb-2 text-[10px] tracking-[0.3em] text-accent">
+              A PLACE TO BEGIN
+            </p>
+            <h2 className="font-serif text-2xl tracking-wide text-white/90">
+              从这些图集开始
+            </h2>
+          </div>
           <Link
             href="/galleries"
-            className="text-sm text-[#c9a87c]/80 transition hover:text-[#e0c9a0]"
+            className="shrink-0 text-sm text-accent transition hover:text-accent"
           >
             全部图集 →
           </Link>
         </div>
         {galleries && galleries.items.length > 0 ? (
-          <InfiniteGalleries
-            key={category || "all"}
-            initial={galleries}
-            category={category}
-            pageSize={12}
-          />
+          <Masonry>
+            {galleries.items.slice(0, 6).map((gallery) => (
+              <GalleryCard key={gallery.id} gallery={gallery} />
+            ))}
+          </Masonry>
         ) : (
           !error && (
             <p className="py-20 text-center text-white/40">暂无可用图集</p>

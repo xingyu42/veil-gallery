@@ -4,24 +4,35 @@
   --background: #0a0a0a;
   --foreground: #f5f5f5;
   --accent: #c9a87c;
+  --accent-foreground: #17120c;
   --muted: rgba(255, 255, 255, 0.55);
   --card: rgba(255, 255, 255, 0.05);
   --border: rgba(255, 255, 255, 0.12);
+  --status-warning: #fde68a;
+  --status-danger: #fca5a5;
+  --hero-glow: rgba(201, 168, 124, 0.14);
 }
 
 html.light {
   --background: #f4f2ee;
   --foreground: #1a1a1a;
-  --accent: #9a7b4f;
+  --accent: #806036;
+  --accent-foreground: #ffffff;
   --muted: rgba(0, 0, 0, 0.55);
   --card: rgba(0, 0, 0, 0.04);
   --border: rgba(0, 0, 0, 0.12);
+  --status-warning: #92400e;
+  --status-danger: #b42318;
+  --hero-glow: rgba(128, 96, 54, 0.1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-status-warning: var(--status-warning);
+  --color-status-danger: var(--status-danger);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-playfair), ui-serif, Georgia, serif;
 }
@@ -37,7 +48,16 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+:where(a, button, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .break-inside-avoid { break-inside: avoid; }
+
+.theme-icon-light { display: none; }
+html.light .theme-icon-dark { display: none; }
+html.light .theme-icon-light { display: block; }
 
 /* ===== Light mode: force dark text for common white utilities ===== */
 html.light .text-white { color: #1a1a1a !important; }

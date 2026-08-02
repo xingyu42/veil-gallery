@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getGalleries, getCategories } from "@/lib/api";
 import { getCachedStartOffset } from "@/lib/start-offset";
 import InfiniteGalleries from "@/components/InfiniteGalleries";
-import { describeUpstreamError } from "@/lib/upstream-error";
+import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
 export const revalidate = 300;
 
@@ -27,7 +27,7 @@ export default async function GalleriesPage({ searchParams }: Props) {
     data = gals;
     categories = cats.items || [];
   } catch (e) {
-    error = e instanceof Error ? e.message : "加载失败";
+    error = getErrorMessage(e, "加载失败");
   }
 
   return (
@@ -36,7 +36,7 @@ export default async function GalleriesPage({ searchParams }: Props) {
         <h1 className="font-serif text-3xl tracking-wide text-white">
           图集
           {category && (
-            <span className="ml-3 text-lg text-[#c9a87c]">· {category}</span>
+            <span className="ml-3 text-lg text-accent">· {category}</span>
           )}
         </h1>
         <p className="mt-2 text-sm text-white/40">
@@ -48,7 +48,7 @@ export default async function GalleriesPage({ searchParams }: Props) {
           href="/galleries"
           className={`rounded-full px-3 py-1.5 text-sm transition ${
             !category
-              ? "bg-[#c9a87c]/20 text-[#e0c9a0] ring-1 ring-[#c9a87c]/40"
+              ? "bg-accent/10 text-accent ring-1 ring-accent/40"
               : "bg-white/5 text-white/60 hover:bg-white/10"
           }`}
         >
@@ -60,16 +60,19 @@ export default async function GalleriesPage({ searchParams }: Props) {
             href={`/galleries?category=${encodeURIComponent(c.name)}`}
             className={`rounded-full px-3 py-1.5 text-sm transition ${
               category === c.name
-                ? "bg-[#c9a87c]/20 text-[#e0c9a0] ring-1 ring-[#c9a87c]/40"
+                ? "bg-accent/10 text-accent ring-1 ring-accent/40"
                 : "bg-white/5 text-white/60 hover:bg-white/10"
             }`}
           >
             {c.name}
+            <span className="ml-1 text-xs opacity-50">
+              {c.gallery_count.toLocaleString()}
+            </span>
           </Link>
         ))}
       </div>
       {error && (
-        <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-200">
+        <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-status-warning">
           {describeUpstreamError(error, "源站限流中，请稍后再试")}
         </div>
       )}

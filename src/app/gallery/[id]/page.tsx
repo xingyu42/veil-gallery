@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getGallery } from "@/lib/api";
 import GalleryImages from "@/components/GalleryImages";
 import type { Metadata } from "next";
-import { describeUpstreamError } from "@/lib/upstream-error";
+import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
 export const revalidate = 3600;
 
@@ -32,8 +32,9 @@ export default async function GalleryPage({ params }: Props) {
   try {
     gallery = await getGallery(id);
   } catch (caught) {
-    if (caught instanceof Error && caught.message.includes("404")) notFound();
-    error = caught instanceof Error ? caught.message : "加载失败";
+    const message = getErrorMessage(caught, "加载失败");
+    if (message.includes("404")) notFound();
+    error = message;
   }
 
   if (!gallery && !error) notFound();
@@ -41,7 +42,7 @@ export default async function GalleryPage({ params }: Props) {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
       {error && (
-        <div className="mb-8 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+        <div className="mb-8 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-status-danger">
           {describeUpstreamError(
             error,
             "源站接口限流，请稍后再试（约 30 分钟）"
@@ -54,7 +55,7 @@ export default async function GalleryPage({ params }: Props) {
           <div className="mb-8">
             <Link
               href="/galleries"
-              className="mb-4 inline-block text-sm text-white/40 transition hover:text-[#c9a87c]"
+              className="mb-4 inline-block text-sm text-white/40 transition hover:text-accent"
             >
               ← 返回图集列表
             </Link>

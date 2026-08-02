@@ -35,7 +35,7 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
             key={image.id}
             type="button"
             onClick={() => setActiveIndex(index)}
-            className="group relative mb-4 block w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 ring-1 ring-white/10 transition hover:ring-[#c9a87c]/40"
+            className="group relative mb-4 block w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 ring-1 ring-white/10 transition hover:ring-accent/40"
           >
             <RemoteImage
               id={image.id}
