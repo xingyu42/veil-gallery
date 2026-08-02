@@ -28,17 +28,22 @@ npm run dev
 ## 环境变量
 
 ```bash
-# Upstash Redis（图片限流 + 图集 startOffset 共享，必需）
-UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
+# Upstash Redis（图片限流 + 图集 startOffset 共享）
+# Vercel Marketplace「Upstash」集成会自动注入，一般无需手填：
+UPSTASH_REDIS_REST_URL=https://....upstash.io
+UPSTASH_REDIS_REST_TOKEN=...
 
-# 可选：手动校准密钥（/api/calibrate-offset?key=...）
+# 兼容旧 Vercel KV 命名（集成有时只注入这一对）：
+# KV_REST_API_URL=...
+# KV_REST_API_TOKEN=...
+
+# 可选：手动校准密钥（仅当设置了 CRON_SECRET 时，/api/calibrate-offset 才要 ?key=）
 # CRON_SECRET=your-secret
 
 # 可选：未校准前的启动偏移（默认 0，由 getGalleries 稀疏扫描兜底）
 # GALLERY_START_OFFSET=0
 
-# 如未配置 Upstash：限流失效保护（放行）；startOffset 仅进程内存，跨实例不共享
+# 如未配置 Redis：限流失效保护（放行）；startOffset 仅进程内存，跨实例不共享
 ```
 
 获取方式：

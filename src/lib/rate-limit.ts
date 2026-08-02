@@ -25,7 +25,7 @@ function getRatelimiter() {
   const redis = getRedis();
   if (!redis) {
     console.warn(
-      "[rate-limit] UPSTASH_REDIS_REST_URL/TOKEN not set — rate limiting DISABLED"
+      "[rate-limit] Redis env not set (UPSTASH_* or KV_REST_API_*) — rate limiting DISABLED"
     );
     return null;
   }
