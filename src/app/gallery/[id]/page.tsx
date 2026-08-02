@@ -59,8 +59,8 @@ export default async function GalleryPage({ params }: Props) {
             <h1 className="font-serif text-2xl tracking-wide text-white sm:text-3xl">
               {gallery.title}
             </h1>
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/50">
-              {gallery.category && (
+            {gallery.category && (
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/50">
                 <Link
                   href={`/galleries?category=${encodeURIComponent(
                     gallery.category
@@ -69,12 +69,8 @@ export default async function GalleryPage({ params }: Props) {
                 >
                   {gallery.category}
                 </Link>
-              )}
-              <span>
-                {gallery.images.length} / {gallery.uploaded_images ?? gallery.image_count}{" "}
-                张可用
-              </span>
-            </div>
+              </div>
+            )}
           </div>
 
           <GalleryImages gallery={gallery} />
