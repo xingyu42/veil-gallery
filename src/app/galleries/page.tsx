@@ -31,8 +31,8 @@ export default async function GalleriesPage({ searchParams }: Props) {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
       <div className="mb-8">
-        <h1 className="font-serif text-3xl tracking-wide text-white">图集</h1>
-        <p className="mt-2 text-sm text-white/40">
+        <h1 className="font-serif text-3xl tracking-wide text-foreground">图集</h1>
+        <p className="mt-2 text-sm text-subtle">
           仅展示已上传图片的图集 · 下拉加载更多
         </p>
       </div>
@@ -44,7 +44,7 @@ export default async function GalleriesPage({ searchParams }: Props) {
       {data && (data.items.length > 0 || data.has_next) ? (
         <InfiniteGalleries initial={data} pageSize={12} />
       ) : (
-        !error && <p className="py-20 text-center text-white/40">暂无可用图集</p>
+        !error && <p className="py-20 text-center text-subtle">暂无可用图集</p>
       )}
     </div>
   );

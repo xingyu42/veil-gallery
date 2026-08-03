@@ -38,15 +38,15 @@ export default async function TagPage({ params }: Props) {
       <div className="mb-8">
         <Link
           href="/tags"
-          className="mb-4 inline-block text-sm text-white/40 transition hover:text-accent"
+          className="mb-4 inline-block text-sm text-subtle transition hover:text-accent"
         >
           ← 返回标签列表
         </Link>
-        <h1 className="font-serif text-3xl tracking-wide text-white">
+        <h1 className="font-serif text-3xl tracking-wide text-foreground">
           <span className="text-accent">#</span>
           {decoded}
         </h1>
-        <p className="mt-2 text-sm text-white/40">
+        <p className="mt-2 text-sm text-subtle">
           随机预览最多 6 张图片（API 限制）· 点击图片查看元数据
         </p>
       </div>
@@ -61,7 +61,7 @@ export default async function TagPage({ params }: Props) {
         <TagPreviewImages imageIds={imageIds} tagName={decoded} />
       ) : (
         !error && (
-          <p className="py-20 text-center text-white/40">该标签暂无预览图片</p>
+          <p className="py-20 text-center text-subtle">该标签暂无预览图片</p>
         )
       )}
     </div>

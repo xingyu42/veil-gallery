@@ -49,7 +49,7 @@ export default function FilterBar({
         className={`rounded-full px-3 py-1.5 text-sm transition ${
           !currentCategory
             ? "bg-accent/10 text-accent ring-1 ring-accent/40"
-            : "bg-white/5 text-white/60 hover:bg-white/10"
+            : "bg-card text-muted hover:bg-card"
         }`}
       >
         全部
@@ -62,7 +62,7 @@ export default function FilterBar({
           className={`rounded-full px-3 py-1.5 text-sm transition ${
             currentCategory === c.name
               ? "bg-accent/10 text-accent ring-1 ring-accent/40"
-              : "bg-white/5 text-white/60 hover:bg-white/10"
+              : "bg-card text-muted hover:bg-card"
           }`}
         >
           {c.name}
