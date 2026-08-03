@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSiteConfig, getFeaturedTags, getGalleries } from "@/lib/api";
+import { getPopularGalleries } from "@/lib/gallery-views";
 import { getStartOffset } from "@/lib/start-offset";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import type { GalleryListItem } from "@/lib/types";
@@ -36,20 +37,29 @@ export default async function HomePage({ searchParams }: Props) {
   let config = null;
   let featuredTags: { id: number; name: string; normalized_name: string }[] = [];
   let galleries: GalleryListItem[] = [];
+  let popular: GalleryListItem[] = [];
   let error: string | null = null;
+
+  // Pure Redis; hoist so upstream failure can still reuse the same result (no 2nd round-trip).
+  const popularPromise = getPopularGalleries(HOME_PREVIEW_COUNT).catch(
+    () => [] as GalleryListItem[]
+  );
 
   try {
     const startOffset = await getStartOffset();
-    const [cfg, tags, pool] = await Promise.all([
+    const [cfg, tags, pool, popularItems] = await Promise.all([
       getSiteConfig(),
       getFeaturedTags(),
       getGalleries(HOME_POOL_SIZE, startOffset),
+      popularPromise,
     ]);
     config = cfg;
     featuredTags = tags.items || [];
     galleries = pickRandom(pool.items || [], HOME_PREVIEW_COUNT);
+    popular = popularItems || [];
   } catch (e) {
     error = getErrorMessage(e, "加载失败");
+    popular = await popularPromise;
   }
 
   const scale = config?.scale;
@@ -102,6 +112,24 @@ export default async function HomePage({ searchParams }: Props) {
         <div className="mb-10">
           <FeaturedBar featuredTags={featuredTags} />
         </div>
+      )}
+
+      {popular.length > 0 && (
+        <section className="mb-10">
+          <div className="mb-6">
+            <p className="mb-2 text-[10px] tracking-[0.3em] text-accent">
+              TRENDING
+            </p>
+            <h2 className="font-serif text-2xl tracking-wide text-foreground">
+              热门图集
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {popular.map((gallery) => (
+              <GalleryCard key={gallery.id} gallery={gallery} />
+            ))}
+          </div>
+        </section>
       )}
 
       <section>

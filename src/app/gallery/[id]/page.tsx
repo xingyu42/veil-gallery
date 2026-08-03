@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getGallery } from "@/lib/api";
 import GalleryImages from "@/components/GalleryImages";
+import GalleryViewTracker from "@/components/GalleryViewTracker";
 import type { Metadata } from "next";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
@@ -52,6 +53,13 @@ export default async function GalleryPage({ params }: Props) {
 
       {gallery && (
         <>
+          <GalleryViewTracker
+            id={gallery.id}
+            title={gallery.title}
+            coverId={gallery.cover?.image_id ?? gallery.cover_image_id ?? 0}
+            category={gallery.category}
+            imageCount={gallery.image_count}
+          />
           <div className="mb-8">
             <Link
               href="/galleries"

@@ -68,6 +68,7 @@ cp .env.example .env.local
 | 主题切换 | 自实现 ThemeProvider + localStorage + CSS 变量 |
 | 图片灯箱 | [yet-another-react-lightbox](https://github.com/igordanchenko/yet-another-react-lightbox)（`AppLightbox`）+ 自定义元数据侧栏，元数据走 `/api/image/[id]/meta` |
 | 限流保护 | 共享桶 100/5min/区域 + tag-preview 专属 60/5min/区域；图片 CDN 永久缓存；JSON `revalidate` / Route 缓存 |
+| 图集热度 | 详情页 beacon → Redis ZSET `gallery:pv`（无图片预热）；首页 RSC 读 Top-N「热门图集」 |
 | 图集列表 / 随机预览 | CSS Grid（1–4 列） |
 | 图集详情瀑布流 | 最短列算法（`ShortestColumnMasonry`），保持 1→2→3→4 阅读顺序 |
 

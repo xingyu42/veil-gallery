@@ -3,12 +3,13 @@ import { getRedis } from "./redis";
 import { UpstreamRateLimitError } from "./upstream-error";
 
 /**
- * Per-region rate limiters for upstream traffic.
+ * Per-region rate limiters for upstream traffic + gallery view dedupe.
  *
  * 1) Shared bucket (`rl:upstream`): all image MISS + JSON — 100 / 300s / region
  *    Aligns with the generic upstream IP budget.
  * 2) Tag-preview bucket (`rl:tag-preview`): only `/v1/tag/.../preview`
  *    — 60 / 300s / region (stricter endpoint policy; no local ban tracking).
+ * 3) Gallery view bucket (`rl:view`): 1 / 300s per IP + galleryId (beacon dedupe).
  *
  * Fail-open when Redis is missing or errors.
  */
@@ -19,8 +20,13 @@ const SHARED_WINDOW = "300 s";
 const TAG_PREVIEW_LIMIT = 60;
 const TAG_PREVIEW_WINDOW = "300 s";
 
+/** One counted view per IP per gallery within the window. */
+const VIEW_LIMIT = 1;
+const VIEW_WINDOW = "300 s";
+
 let sharedLimiter: Ratelimit | null = null;
 let tagPreviewLimiter: Ratelimit | null = null;
+let viewLimiter: Ratelimit | null = null;
 let redisWarned = false;
 
 function warnNoRedisOnce() {
@@ -64,6 +70,12 @@ function getTagPreviewLimiter() {
     "rl:tag-preview"
   );
   return tagPreviewLimiter;
+}
+
+function getViewLimiter() {
+  if (viewLimiter) return viewLimiter;
+  viewLimiter = createLimiter(VIEW_LIMIT, VIEW_WINDOW, "rl:view");
+  return viewLimiter;
 }
 
 export interface RateLimitResult {
@@ -154,4 +166,20 @@ export async function consumeTagPreviewRateLimit(
   region: string = currentRegion()
 ): Promise<RateLimitResult> {
   return consume(checkTagPreviewRateLimit, region);
+}
+
+/**
+ * Gallery detail view beacon: 1 counted view / 300s per IP + galleryId.
+ * Non-throwing; caller treats !allowed as skip (still HTTP 204).
+ */
+export async function checkGalleryViewRateLimit(
+  ip: string,
+  galleryId: string | number
+): Promise<RateLimitResult> {
+  const safeIp = (ip || "unknown").slice(0, 128);
+  return runLimit(
+    getViewLimiter(),
+    `${safeIp}:${galleryId}`,
+    VIEW_LIMIT
+  );
 }
