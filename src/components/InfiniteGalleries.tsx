@@ -45,7 +45,6 @@ export default function InfiniteGalleries({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const consecutiveEmptyRef = useRef(0);
-  // Prefetched next page keyed by the offset it was fetched for
   const prefetchRef = useRef<{ offset: number; data: Page } | null>(null);
   const prefetchingRef = useRef(false);
 
@@ -75,7 +74,7 @@ export default function InfiniteGalleries({
         const data: Page = await res.json();
         prefetchRef.current = { offset: forOffset, data };
       } catch {
-        // silent — loadMore will retry on demand
+        // silent
       } finally {
         prefetchingRef.current = false;
       }
@@ -140,7 +139,6 @@ export default function InfiniteGalleries({
         data = await res.json();
       }
       const next = applyPage(data, offset);
-      // Kick off prefetch for the page after this one
       void prefetchNext(next);
     } catch (e) {
       if (isTimeoutError(e)) {
@@ -162,7 +160,6 @@ export default function InfiniteGalleries({
     void loadMore();
   }, [loadMore]);
 
-  // Prefetch next page as soon as we have a cursor
   useEffect(() => {
     if (hasMore) void prefetchNext(offset);
   }, [offset, hasMore, prefetchNext]);
@@ -239,7 +236,7 @@ export default function InfiniteGalleries({
         </div>
       )}
       {!loading && !hasMore && stoppedReason === "empty" && (
-        <div className="py-6 text-center text-sm text-white/40">
+        <div className="py-6 text-center text-sm text-subtle">
           暂时没有更多可展示的图集
           <button
             onClick={() => void resumeAfterEmptyStop()}
@@ -250,12 +247,12 @@ export default function InfiniteGalleries({
         </div>
       )}
       {!loading && !hasMore && items.length > 0 && stoppedReason !== "empty" && (
-        <p className="py-6 text-center text-sm text-white/30">
+        <p className="py-6 text-center text-sm text-subtle">
           已经到底了 · 共 {items.length} 个图集
         </p>
       )}
       {!loading && !hasMore && items.length === 0 && stoppedReason !== "empty" && (
-        <p className="py-12 text-center text-sm text-white/40">暂无可用图集</p>
+        <p className="py-12 text-center text-sm text-subtle">暂无可用图集</p>
       )}
     </div>
   );

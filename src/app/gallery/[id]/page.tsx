@@ -55,16 +55,16 @@ export default async function GalleryPage({ params }: Props) {
           <div className="mb-8">
             <Link
               href="/galleries"
-              className="mb-4 inline-block text-sm text-white/40 transition hover:text-accent"
+              className="mb-4 inline-block text-sm text-subtle transition hover:text-accent"
             >
               ← 返回图集列表
             </Link>
-            <h1 className="font-serif text-2xl tracking-wide text-white sm:text-3xl">
+            <h1 className="font-serif text-2xl tracking-wide text-foreground sm:text-3xl">
               {gallery.title}
             </h1>
             {gallery.category && (
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/50">
-                <span className="rounded-full bg-white/5 px-3 py-1">
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted">
+                <span className="rounded-full bg-card px-3 py-1">
                   {gallery.category}
                 </span>
               </div>

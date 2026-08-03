@@ -167,7 +167,7 @@ export default function RandomGalleries({
         >
           换一批
         </button>
-        <span className="text-xs text-white/30">下拉自动加载更多</span>
+        <span className="text-xs text-subtle">下拉自动加载更多</span>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -204,7 +204,7 @@ export default function RandomGalleries({
       )}
 
       {!loading && items.length === 0 && (
-        <p className="py-12 text-center text-sm text-white/40">暂无随机图集</p>
+        <p className="py-12 text-center text-sm text-subtle">暂无随机图集</p>
       )}
     </div>
   );
