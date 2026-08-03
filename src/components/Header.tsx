@@ -28,6 +28,9 @@ export default function Header() {
           <Link href="/galleries" className="transition hover:text-accent">
             图集
           </Link>
+          <Link href="/popular" className="transition hover:text-accent">
+            热门
+          </Link>
           <Link href="/tags" className="transition hover:text-accent">
             标签
           </Link>
