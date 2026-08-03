@@ -5,8 +5,7 @@ import { getStartOffset } from "@/lib/start-offset";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import type { GalleryListItem } from "@/lib/types";
 import FeaturedBar from "@/components/FeaturedBar";
-import GalleryCard from "@/components/GalleryCard";
-import Masonry from "@/components/Masonry";
+import HomeGalleryPreview from "@/components/HomeGalleryPreview";
 
 export const revalidate = 300;
 
@@ -123,11 +122,7 @@ export default async function HomePage({ searchParams }: Props) {
           </Link>
         </div>
         {galleries.length > 0 ? (
-          <Masonry>
-            {galleries.map((gallery) => (
-              <GalleryCard key={gallery.id} gallery={gallery} />
-            ))}
-          </Masonry>
+          <HomeGalleryPreview galleries={galleries} />
         ) : (
           !error && (
             <p className="py-20 text-center text-white/40">暂无可用图集</p>
