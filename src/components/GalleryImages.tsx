@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RemoteImage from "./RemoteImage";
 import AppLightbox from "./AppLightbox";
-import Masonry from "./Masonry";
+import ShortestColumnMasonry, {
+  relativeHeight,
+  type MasonryItem,
+} from "./ShortestColumnMasonry";
 import { availableImages } from "@/lib/api";
 import type { GalleryDetail, GalleryImage, GalleryImagePage } from "@/lib/types";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
 const PAGE_SIZE = 20;
+
+type Cell = { image: GalleryImage; index: number };
 
 interface Props {
   gallery: GalleryDetail;
@@ -90,37 +95,34 @@ export default function GalleryImages({ gallery }: Props) {
     return () => observer.disconnect();
   }, [error, hasMore, loadMore]);
 
-  if (images.length === 0) {
-    return <p className="py-16 text-center text-white/40">该图集暂无可用图片</p>;
-  }
-
-  return (
-    <>
-      {/* CSS multi-column masonry — column-major flow */}
-      <Masonry>
-        {images.map((image, index) => {
+  const masonryItems = useMemo<MasonryItem<Cell>[]>(
+    () =>
+      images.map((image, index) => ({
+        key: image.id,
+        data: { image, index },
+        weight: relativeHeight(image.width, image.height),
+        render: ({ image: img, index: idx }) => {
           const hasSize =
-            typeof image.width === "number" &&
-            typeof image.height === "number" &&
-            image.width > 0 &&
-            image.height > 0;
+            typeof img.width === "number" &&
+            typeof img.height === "number" &&
+            img.width > 0 &&
+            img.height > 0;
 
           return (
             <button
-              key={image.id}
               type="button"
-              onClick={() => setActiveIndex(index)}
-              className="group relative mb-4 w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
+              onClick={() => setActiveIndex(idx)}
+              className="group relative w-full cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
               style={{
                 aspectRatio: hasSize
-                  ? `${image.width} / ${image.height}`
+                  ? `${img.width} / ${img.height}`
                   : "3 / 4",
               }}
-              aria-label={`放大查看 ${gallery.title} 第 ${image.sort_order} 张`}
+              aria-label={`放大查看 ${gallery.title} 第 ${img.sort_order} 张`}
             >
               <RemoteImage
-                id={image.id}
-                alt={`${gallery.title} #${image.sort_order}`}
+                id={img.id}
+                alt={`${gallery.title} #${img.sort_order}`}
                 className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-95"
               />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/20 group-hover:opacity-100">
@@ -130,8 +132,19 @@ export default function GalleryImages({ gallery }: Props) {
               </div>
             </button>
           );
-        })}
-      </Masonry>
+        },
+      })),
+    [images, gallery.title]
+  );
+
+  if (images.length === 0) {
+    return <p className="py-16 text-center text-white/40">该图集暂无可用图片</p>;
+  }
+
+  return (
+    <>
+      {/* Shortest-column masonry: sequential place into the currently shortest column */}
+      <ShortestColumnMasonry items={masonryItems} gapClassName="gap-3" />
 
       <div ref={sentinelRef} className="flex min-h-24 items-center justify-center py-6">
         {loading && (
