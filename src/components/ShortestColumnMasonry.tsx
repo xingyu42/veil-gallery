@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 
 /** Match Tailwind sm/md/lg breakpoints used elsewhere. */
 function columnCountForWidth(width: number): number {
@@ -10,17 +10,32 @@ function columnCountForWidth(width: number): number {
   return 1;
 }
 
+/**
+ * SSR / hydration default: md (3 cols).
+ * Avoids the old useState(1) → client 4 jump that drove CLS on desktop.
+ * Mobile may still adjust 3→1/2 once; that shift is smaller than 1→4.
+ */
+const SSR_COLUMN_COUNT = 3;
+
+function subscribeColumnCount(onStoreChange: () => void): () => void {
+  window.addEventListener("resize", onStoreChange);
+  return () => window.removeEventListener("resize", onStoreChange);
+}
+
+function getColumnCountSnapshot(): number {
+  return columnCountForWidth(window.innerWidth);
+}
+
+function getServerColumnCountSnapshot(): number {
+  return SSR_COLUMN_COUNT;
+}
+
 function useColumnCount(): number {
-  const [count, setCount] = useState(1);
-
-  useEffect(() => {
-    const update = () => setCount(columnCountForWidth(window.innerWidth));
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-
-  return count;
+  return useSyncExternalStore(
+    subscribeColumnCount,
+    getColumnCountSnapshot,
+    getServerColumnCountSnapshot
+  );
 }
 
 /** Relative height unit for packing (width normalized to 1). */

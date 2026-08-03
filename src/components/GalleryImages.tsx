@@ -12,6 +12,8 @@ import type { GalleryDetail, GalleryImage, GalleryImagePage } from "@/lib/types"
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
 const PAGE_SIZE = 20;
+/** First viewport row(s): 4 cols × 2 rows covers desktop LCP candidates. */
+const PRIORITY_IMAGE_COUNT = 8;
 
 type Cell = { image: GalleryImage; index: number };
 
@@ -124,6 +126,7 @@ export default function GalleryImages({ gallery }: Props) {
                 id={img.id}
                 alt={`${gallery.title} #${img.sort_order}`}
                 className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-95"
+                priority={idx < PRIORITY_IMAGE_COUNT}
               />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/20 group-hover:opacity-100">
                 <span className="keep-white rounded-full bg-black/55 px-3 py-1 text-xs text-white backdrop-blur-sm">

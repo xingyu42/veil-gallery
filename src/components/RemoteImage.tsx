@@ -12,6 +12,11 @@ interface Props {
   draggable?: boolean;
   /** When true (default), wrapper is h-full w-full for cards/aspect boxes. */
   fill?: boolean;
+  /**
+   * LCP / above-the-fold images: eager load + high fetch priority.
+   * Default false keeps lazy loading for offscreen tiles.
+   */
+  priority?: boolean;
   onLoad?: () => void;
   onError?: () => void;
 }
@@ -53,6 +58,7 @@ export default function RemoteImage({
   fallback,
   draggable,
   fill = true,
+  priority = false,
   onLoad,
   onError,
 }: Props) {
@@ -125,7 +131,8 @@ export default function RemoteImage({
         src={src}
         alt={alt}
         className={`${className} ${loaded ? "opacity-100" : "opacity-0"}`}
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "auto"}
         decoding="async"
         draggable={draggable}
         referrerPolicy="no-referrer"
