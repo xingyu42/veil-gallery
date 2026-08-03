@@ -17,7 +17,7 @@ export default function GalleryCard({ gallery }: { gallery: GalleryListItem }) {
   return (
     <Link
       href={`/gallery/${gallery.id}`}
-      className="group relative mb-4 break-inside-avoid overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition duration-300 hover:ring-accent/50"
+      className="group relative block overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition duration-300 hover:ring-accent/50"
     >
       <div className="relative aspect-[3/4] w-full overflow-hidden bg-zinc-900">
         {coverId ? (
