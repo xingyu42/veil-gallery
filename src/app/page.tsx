@@ -7,7 +7,8 @@ import type { GalleryListItem } from "@/lib/types";
 import FeaturedBar from "@/components/FeaturedBar";
 import GalleryCard from "@/components/GalleryCard";
 
-export const revalidate = 300;
+// getStartOffset / Upstash rate-limit use no-store Redis REST; not ISR-compatible.
+export const dynamic = "force-dynamic";
 
 /** Pool size for homepage preview; drawn from cached getGalleries window. */
 const HOME_POOL_SIZE = 48;

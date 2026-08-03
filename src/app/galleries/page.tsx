@@ -4,7 +4,8 @@ import InfiniteGalleries from "@/components/InfiniteGalleries";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import { redirect } from "next/navigation";
 
-export const revalidate = 300;
+// getStartOffset / Upstash rate-limit use no-store Redis REST; not ISR-compatible.
+export const dynamic = "force-dynamic";
 
 interface Props {
   searchParams: Promise<{ category?: string }>;

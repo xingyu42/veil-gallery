@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { getPopularGalleries } from "@/lib/gallery-views";
 import GalleryCard from "@/components/GalleryCard";
 
-export const revalidate = 300;
+// Upstash Redis REST uses no-store fetch; cannot be statically prerendered / ISR.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "热门图集",

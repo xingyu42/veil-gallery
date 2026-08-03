@@ -3,7 +3,8 @@ import { getGalleries } from "@/lib/api";
 import { getStartOffset } from "@/lib/start-offset";
 import { upstreamJsonError } from "@/lib/upstream-error";
 
-export const revalidate = 300;
+// getStartOffset / Upstash rate-limit use no-store Redis REST; not ISR-compatible.
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
