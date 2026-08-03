@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import RemoteImage from "./RemoteImage";
-import Lightbox from "./Lightbox";
+import AppLightbox from "./AppLightbox";
 import { describeUpstreamError } from "@/lib/upstream-error";
 import type { GalleryImage } from "@/lib/types";
 
@@ -102,22 +102,13 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
         </p>
       )}
 
-      <Lightbox
+      <AppLightbox
         images={images}
         index={activeIndex}
         total={images.length}
         title={`#${tagName}`}
         onClose={() => setActiveIndex(null)}
-        onPrevious={() =>
-          setActiveIndex((current) =>
-            current === null ? null : Math.max(0, current - 1)
-          )
-        }
-        onNext={() =>
-          setActiveIndex((current) =>
-            current === null ? null : Math.min(images.length - 1, current + 1)
-          )
-        }
+        onIndexChange={setActiveIndex}
       />
     </>
   );
