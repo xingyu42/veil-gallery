@@ -1,16 +1,27 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  getSiteConfig,
-  getFeaturedTags,
-  getRandomGalleries,
-} from "@/lib/api";
+import { getSiteConfig, getFeaturedTags, getGalleries } from "@/lib/api";
+import { getStartOffset } from "@/lib/start-offset";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
+import type { GalleryListItem } from "@/lib/types";
 import FeaturedBar from "@/components/FeaturedBar";
 import GalleryCard from "@/components/GalleryCard";
 import Masonry from "@/components/Masonry";
 
 export const revalidate = 300;
+
+/** Pool size for homepage preview; drawn from cached getGalleries window. */
+const HOME_POOL_SIZE = 48;
+const HOME_PREVIEW_COUNT = 8;
+
+function pickRandom<T>(items: T[], n: number): T[] {
+  const a = items.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, Math.min(n, a.length));
+}
 
 interface Props {
   searchParams: Promise<{ category?: string }>;
@@ -26,18 +37,21 @@ export default async function HomePage({ searchParams }: Props) {
 
   let config = null;
   let featuredTags: { id: number; name: string; normalized_name: string }[] = [];
-  let galleries: Awaited<ReturnType<typeof getRandomGalleries>> = [];
+  let galleries: GalleryListItem[] = [];
   let error: string | null = null;
 
   try {
-    const [cfg, tags, randomGalleries] = await Promise.all([
+    // Sample from the calibrated dense list window (Next Data Cache, revalidate 300)
+    // instead of N parallel /v1/gallery/random upstream calls (~2s each).
+    const startOffset = await getStartOffset();
+    const [cfg, tags, pool] = await Promise.all([
       getSiteConfig(),
       getFeaturedTags(),
-      getRandomGalleries(8),
+      getGalleries(HOME_POOL_SIZE, startOffset),
     ]);
     config = cfg;
     featuredTags = tags.items || [];
-    galleries = randomGalleries;
+    galleries = pickRandom(pool.items || [], HOME_PREVIEW_COUNT);
   } catch (e) {
     error = getErrorMessage(e, "加载失败");
   }
