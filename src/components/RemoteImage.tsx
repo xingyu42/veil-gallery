@@ -21,6 +21,10 @@ interface Props {
  *
  * No client-side throttling needed; rate-limit pressure shifts to Vercel's
  * shared outbound pool, and hot images serve at global CDN latency.
+ *
+ * IMPORTANT: do not use `display: none` (Tailwind `hidden`) before load when
+ * combined with loading="lazy". Browsers skip fetching display:none lazy
+ * images, so onLoad never fires and the skeleton stays forever.
  */
 export default function RemoteImage({
   id,
@@ -54,7 +58,9 @@ export default function RemoteImage({
       <img
         src={imageUrl(id)}
         alt={alt}
-        className={loaded ? className : "hidden"}
+        // opacity-0 keeps layout size so loading="lazy" still fetches;
+        // Tailwind `hidden` (display:none) would block the request entirely.
+        className={loaded ? className : `${className} opacity-0 absolute inset-0 h-full w-full`.trim()}
         loading="lazy"
         decoding="async"
         draggable={draggable}
