@@ -22,7 +22,7 @@ interface Props {
   onClose: () => void;
   /** Sync controlled index back to parent */
   onIndexChange: (index: number) => void;
-  /** Called when user tries to go past the last loaded image */
+  /** Called when user approaches the last loaded images */
   onRequestMore?: () => void | Promise<void>;
 }
 
@@ -56,7 +56,7 @@ export default function AppLightbox({
     [images, title]
   );
 
-  // Reset meta panel when image changes or lightbox closes
+  // Reset meta panel when lightbox closes
   useEffect(() => {
     if (!open) {
       setMetaOpen(false);
@@ -104,7 +104,6 @@ export default function AppLightbox({
     if (!open) return;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "i" || event.key === "I") {
-        // Avoid conflict when typing in inputs (none expected here)
         setMetaOpen((v) => !v);
       }
     };
@@ -171,23 +170,15 @@ export default function AppLightbox({
                 fontWeight: 500,
                 letterSpacing: "0.02em",
                 padding: "0 12px",
-                color: metaOpen ? "var(--yarl__color_button_active, #c9a87c)" : undefined,
+                color: metaOpen
+                  ? "var(--yarl__color_button_active, #c9a87c)"
+                  : undefined,
               }}
             >
               元数据
             </button>,
             "close",
           ],
-        }}
-        render={{
-          // Show a small loading indicator on next when parent is fetching more
-          iconNext: () =>
-            loadingMore && index === images.length - 1 ? (
-              <span
-                className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                aria-hidden
-              />
-            ) : undefined,
         }}
       />
 
