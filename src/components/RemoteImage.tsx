@@ -49,7 +49,7 @@ export default function RemoteImage({
   id,
   alt,
   className = "",
-  placeholderClassName = "aspect-[3/4] w-full animate-pulse bg-zinc-900",
+  placeholderClassName = "aspect-[3/4] w-full animate-pulse bg-placeholder",
   fallback,
   draggable,
   fill = true,
@@ -75,12 +75,12 @@ export default function RemoteImage({
       <div
         className={
           fill
-            ? "relative flex h-full w-full flex-col items-center justify-center gap-2 bg-zinc-900"
-            : "relative flex min-h-[120px] min-w-[120px] flex-col items-center justify-center gap-2 bg-zinc-900"
+            ? "relative flex h-full w-full flex-col items-center justify-center gap-2 bg-placeholder"
+            : "relative flex min-h-[120px] min-w-[120px] flex-col items-center justify-center gap-2 bg-placeholder"
         }
       >
         {fallback ?? (
-          <span className="px-2 text-center text-xs text-white/30">
+          <span className="px-2 text-center text-xs text-subtle">
             图片加载失败
           </span>
         )}
@@ -91,7 +91,7 @@ export default function RemoteImage({
             e.stopPropagation();
             retry();
           }}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70 ring-1 ring-white/15 transition hover:bg-accent/20 hover:text-accent hover:ring-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-card text-muted ring-1 ring-border transition hover:bg-accent/20 hover:text-accent hover:ring-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           aria-label="重新加载图片"
           title="重试"
         >
