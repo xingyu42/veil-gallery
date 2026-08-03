@@ -181,7 +181,7 @@ export default function AppLightbox({
         }}
       />
 
-      {/* Metadata slide-over — scheme A */}
+      {/* Metadata slide-over — always dark surface (ignore page light theme) */}
       {open && metaOpen && (
         <div
           role="presentation"
@@ -191,20 +191,21 @@ export default function AppLightbox({
       )}
 
       <aside
-        className={`fixed inset-y-0 right-0 z-[10002] flex w-full max-w-sm flex-col border-l border-white/10 bg-zinc-950 shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
+        className={`fixed inset-y-0 right-0 z-[10002] flex w-full max-w-sm flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
           open && metaOpen
             ? "translate-x-0"
             : "pointer-events-none translate-x-full"
         }`}
+        style={{ colorScheme: "dark" }}
         aria-hidden={!metaOpen}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
-          <h2 className="text-xs tracking-[0.2em] text-accent">元数据</h2>
+        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-4">
+          <h2 className="text-xs tracking-[0.2em] text-[#c9a87c]">元数据</h2>
           <button
             type="button"
             onClick={() => setMetaOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-white/60 transition hover:bg-white/10 hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100"
             aria-label="关闭元数据"
           >
             ×
@@ -212,41 +213,41 @@ export default function AppLightbox({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          {metaLoading && <p className="text-sm text-white/40">加载中…</p>}
+          {metaLoading && <p className="text-sm text-zinc-400">加载中…</p>}
 
           {!metaLoading && metaError && (
-            <p className="text-sm text-white/40">暂无元数据</p>
+            <p className="text-sm text-zinc-400">暂无元数据</p>
           )}
 
           {!metaLoading && !metaError && meta && (
             <dl className="space-y-4 text-sm">
               {sizeLabel && (
                 <div>
-                  <dt className="text-xs text-white/40">尺寸</dt>
-                  <dd className="mt-1 text-white/85">{sizeLabel}</dd>
+                  <dt className="text-xs text-zinc-400">尺寸</dt>
+                  <dd className="mt-1 text-zinc-100">{sizeLabel}</dd>
                 </div>
               )}
               {meta.orientation && (
                 <div>
-                  <dt className="text-xs text-white/40">方向</dt>
-                  <dd className="mt-1 capitalize text-white/85">
+                  <dt className="text-xs text-zinc-400">方向</dt>
+                  <dd className="mt-1 capitalize text-zinc-100">
                     {meta.orientation}
                   </dd>
                 </div>
               )}
               {meta.gallery && (
                 <div>
-                  <dt className="text-xs text-white/40">图集</dt>
+                  <dt className="text-xs text-zinc-400">图集</dt>
                   <dd className="mt-1">
                     <Link
                       href={`/gallery/${meta.gallery.id}`}
-                      className="text-accent transition hover:underline"
+                      className="text-[#c9a87c] transition hover:underline"
                       onClick={onClose}
                     >
                       {meta.gallery.title}
                     </Link>
                     {meta.gallery.category && (
-                      <p className="mt-1 text-xs text-white/45">
+                      <p className="mt-1 text-xs text-zinc-500">
                         {meta.gallery.category}
                       </p>
                     )}
@@ -255,13 +256,13 @@ export default function AppLightbox({
               )}
               {meta.tags && meta.tags.length > 0 && (
                 <div>
-                  <dt className="text-xs text-white/40">标签</dt>
+                  <dt className="text-xs text-zinc-400">标签</dt>
                   <dd className="mt-2 flex flex-wrap gap-1.5">
                     {meta.tags.map((tag) => (
                       <Link
                         key={tag}
                         href={`/tag/${encodeURIComponent(tag)}`}
-                        className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-xs text-white/70 transition hover:border-accent/50 hover:text-accent"
+                        className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-[#c9a87c]/60 hover:text-[#c9a87c]"
                         onClick={onClose}
                       >
                         #{tag}
@@ -272,15 +273,15 @@ export default function AppLightbox({
               )}
               {current && (
                 <div>
-                  <dt className="text-xs text-white/40">图片 ID</dt>
-                  <dd className="mt-1 font-mono text-xs text-white/50">
+                  <dt className="text-xs text-zinc-400">图片 ID</dt>
+                  <dd className="mt-1 font-mono text-xs text-zinc-400">
                     {current.id}
                   </dd>
                 </div>
               )}
               <div>
-                <dt className="text-xs text-white/40">位置</dt>
-                <dd className="mt-1 text-white/85">
+                <dt className="text-xs text-zinc-400">位置</dt>
+                <dd className="mt-1 text-zinc-100">
                   {(index ?? 0) + 1} / {total}
                 </dd>
               </div>
@@ -288,7 +289,7 @@ export default function AppLightbox({
           )}
 
           {!metaLoading && !metaError && !meta && (
-            <p className="text-sm text-white/40">暂无元数据</p>
+            <p className="text-sm text-zinc-400">暂无元数据</p>
           )}
         </div>
       </aside>
