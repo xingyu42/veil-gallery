@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import GalleryCard from "./GalleryCard";
 import { describeUpstreamError } from "@/lib/upstream-error";
-import Masonry from "./Masonry";
 import type { GalleryListItem } from "@/lib/types";
 
 export default function RandomGalleries({
@@ -56,21 +55,17 @@ export default function RandomGalleries({
           return batch.length > 0;
         }
 
-        // Compute against latest items via functional update, track added in outer scope
-        let addedCount = 0;
         setItems((prev) => {
           const ids = new Set(prev.map((g) => g.id));
           const added = batch.filter((g) => !ids.has(g.id));
-          addedCount = added.length;
           return added.length ? [...prev, ...added] : prev;
         });
-        // React 18 runs updater sync in event handlers; for safety re-derive from batch size
+
         if (batch.length === 0) {
           emptyStreakRef.current += 1;
           if (emptyStreakRef.current >= 3) setPaused(true);
           return false;
         }
-        // Assume success when API returned items (dedupe may drop some)
         emptyStreakRef.current = 0;
         setPaused(false);
         return true;
@@ -94,12 +89,10 @@ export default function RandomGalleries({
 
     const rect = el.getBoundingClientRect();
     const vh = window.innerHeight || document.documentElement.clientHeight;
-    // Load when sentinel is within 800px below viewport bottom
     if (rect.top > vh + 800) return;
 
     await fetchBatch(false);
 
-    // Chain with short delay to avoid hammering API while filling tall screens
     if (emptyStreakRef.current < 3 && !loadingRef.current) {
       window.setTimeout(() => {
         const el2 = sentinelRef.current;
@@ -149,7 +142,6 @@ export default function RandomGalleries({
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
-    // Fill viewport on first paint
     const t = window.setTimeout(() => void tryLoadWhileVisible(), 100);
     return () => {
       window.removeEventListener("scroll", onScroll);
@@ -178,11 +170,11 @@ export default function RandomGalleries({
         <span className="text-xs text-white/30">下拉自动加载更多</span>
       </div>
 
-      <Masonry>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {items.map((g) => (
           <GalleryCard key={`${g.id}-${g.cover?.image_id}`} gallery={g} />
         ))}
-      </Masonry>
+      </div>
 
       <div
         ref={sentinelRef}
