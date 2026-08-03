@@ -1,13 +1,22 @@
 @import "tailwindcss";
 
+/*
+ * Semantic color tokens — switch theme by changing variables only.
+ * Components should use text-foreground / text-muted / text-subtle /
+ * bg-card / border-border / bg-header / bg-placeholder instead of
+ * hard-coded text-white/* (which broke on dark overlays in light mode).
+ */
 :root {
   --background: #0a0a0a;
   --foreground: #f5f5f5;
+  --muted: rgba(255, 255, 255, 0.55);
+  --subtle: rgba(255, 255, 255, 0.38);
   --accent: #c9a87c;
   --accent-foreground: #17120c;
-  --muted: rgba(255, 255, 255, 0.55);
   --card: rgba(255, 255, 255, 0.05);
   --border: rgba(255, 255, 255, 0.12);
+  --header-bg: rgba(0, 0, 0, 0.7);
+  --placeholder: #18181b;
   --status-warning: #fde68a;
   --status-danger: #fca5a5;
   --hero-glow: rgba(201, 168, 124, 0.14);
@@ -16,29 +25,62 @@
 html.light {
   --background: #f4f2ee;
   --foreground: #1a1a1a;
+  --muted: rgba(0, 0, 0, 0.55);
+  --subtle: rgba(0, 0, 0, 0.38);
   --accent: #806036;
   --accent-foreground: #ffffff;
-  --muted: rgba(0, 0, 0, 0.55);
   --card: rgba(0, 0, 0, 0.04);
   --border: rgba(0, 0, 0, 0.12);
+  --header-bg: rgba(244, 242, 238, 0.85);
+  --placeholder: #e5e2dc;
   --status-warning: #92400e;
   --status-danger: #b42318;
   --hero-glow: rgba(128, 96, 54, 0.1);
 }
 
+/**
+ * Locked dark surface (lightbox meta, future modals).
+ * Redefines the same tokens so nested semantic classes stay correct
+ * even when the page is in light mode.
+ */
+.theme-dark {
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --muted: rgba(255, 255, 255, 0.55);
+  --subtle: rgba(255, 255, 255, 0.4);
+  --accent: #c9a87c;
+  --accent-foreground: #17120c;
+  --card: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.12);
+  --placeholder: #18181b;
+  color-scheme: dark;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-header: var(--header-bg);
+  --color-placeholder: var(--placeholder);
   --color-status-warning: var(--status-warning);
   --color-status-danger: var(--status-danger);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-playfair), ui-serif, Georgia, serif;
 }
 
-html { color-scheme: dark; }
-html.light { color-scheme: light; }
+html {
+  color-scheme: dark;
+}
+html.light {
+  color-scheme: light;
+}
 
 body {
   background: var(--background);
@@ -53,36 +95,22 @@ body {
   outline-offset: 2px;
 }
 
-.break-inside-avoid { break-inside: avoid; }
+.break-inside-avoid {
+  break-inside: avoid;
+}
 
-.theme-icon-light { display: none; }
-html.light .theme-icon-dark { display: none; }
-html.light .theme-icon-light { display: block; }
+.theme-icon-light {
+  display: none;
+}
+html.light .theme-icon-dark {
+  display: none;
+}
+html.light .theme-icon-light {
+  display: block;
+}
 
-/* ===== Light mode: force dark text for common white utilities ===== */
-html.light .text-white { color: #1a1a1a !important; }
-html.light .text-white\/90 { color: rgba(26, 26, 26, 0.92) !important; }
-html.light .text-white\/80 { color: rgba(26, 26, 26, 0.82) !important; }
-html.light .text-white\/70 { color: rgba(26, 26, 26, 0.72) !important; }
-html.light .text-white\/60 { color: rgba(26, 26, 26, 0.62) !important; }
-html.light .text-white\/50 { color: rgba(26, 26, 26, 0.52) !important; }
-html.light .text-white\/40 { color: rgba(26, 26, 26, 0.45) !important; }
-html.light .text-white\/30 { color: rgba(26, 26, 26, 0.35) !important; }
-html.light .text-white\/20 { color: rgba(26, 26, 26, 0.25) !important; }
-
-html.light .bg-black\/70 { background-color: rgba(255, 255, 255, 0.85) !important; }
-html.light .bg-black\/40 { background-color: rgba(244, 242, 238, 0.95) !important; }
-html.light .bg-white\/5 { background-color: rgba(0, 0, 0, 0.04) !important; }
-html.light .bg-white\/10 { background-color: rgba(0, 0, 0, 0.06) !important; }
-html.light .border-white\/10 { border-color: rgba(0, 0, 0, 0.1) !important; }
-html.light .border-white\/15 { border-color: rgba(0, 0, 0, 0.12) !important; }
-html.light .border-white\/20 { border-color: rgba(0, 0, 0, 0.15) !important; }
-html.light .ring-white\/10 { --tw-ring-color: rgba(0, 0, 0, 0.1) !important; }
-html.light .ring-white\/5 { --tw-ring-color: rgba(0, 0, 0, 0.06) !important; }
-html.light .bg-zinc-900 { background-color: #e5e2dc !important; }
-
-/* Keep text on image overlays white even in light mode */
-html.light .keep-white,
-html.light .keep-white * {
+/* Text on photos / media overlays — always white regardless of page theme */
+.keep-white,
+.keep-white * {
   color: #fff !important;
 }
