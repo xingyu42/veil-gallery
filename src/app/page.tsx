@@ -56,19 +56,19 @@ export default async function HomePage({ searchParams }: Props) {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
-      <section className="relative mb-12 overflow-hidden border-y border-white/10 py-12 text-center sm:py-16">
+      <section className="relative mb-12 overflow-hidden border-y border-border py-12 text-center sm:py-16">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,var(--hero-glow),transparent_58%)]" />
         <p className="relative mb-4 text-[10px] tracking-[0.4em] text-accent">
           CURATED PHOTOGRAPHY
         </p>
-        <h1 className="relative font-serif text-4xl font-medium tracking-tight text-white sm:text-6xl">
+        <h1 className="relative font-serif text-4xl font-medium tracking-tight text-foreground sm:text-6xl">
           <span className="text-accent">Veil</span> Gallery
         </h1>
-        <p className="relative mx-auto mt-4 max-w-2xl text-base leading-7 text-white/50">
+        <p className="relative mx-auto mt-4 max-w-2xl text-base leading-7 text-muted">
           现代时尚写真 · 精选标签发现
         </p>
         {scale && (
-          <p className="relative mt-4 text-xs text-white/30">
+          <p className="relative mt-4 text-xs text-subtle">
             {scale.galleries.toLocaleString()} 图集 · {scale.images.toLocaleString()}{" "}
             图片 · {scale.tags.toLocaleString()} 标签
           </p>
@@ -82,7 +82,7 @@ export default async function HomePage({ searchParams }: Props) {
           </Link>
           <Link
             href="/tags"
-            className="rounded-full border border-white/15 px-5 py-2.5 text-sm text-white/70 transition hover:border-accent/50 hover:text-accent"
+            className="rounded-full border border-border px-5 py-2.5 text-sm text-muted transition hover:border-accent/50 hover:text-accent"
           >
             按标签发现
           </Link>
@@ -110,7 +110,7 @@ export default async function HomePage({ searchParams }: Props) {
             <p className="mb-2 text-[10px] tracking-[0.3em] text-accent">
               A PLACE TO BEGIN
             </p>
-            <h2 className="font-serif text-2xl tracking-wide text-white/90">
+            <h2 className="font-serif text-2xl tracking-wide text-foreground">
               从这些图集开始
             </h2>
           </div>
@@ -129,7 +129,7 @@ export default async function HomePage({ searchParams }: Props) {
           </div>
         ) : (
           !error && (
-            <p className="py-20 text-center text-white/40">暂无可用图集</p>
+            <p className="py-20 text-center text-subtle">暂无可用图集</p>
           )
         )}
       </section>
