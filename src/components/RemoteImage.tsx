@@ -77,32 +77,37 @@ export default function RemoteImage({
   };
 
   if (failed) {
+    // fill: absolute inset so we sit above card chrome (gradient/title) and
+    // keep label + retry as one mid-card stack — not a footer-looking control.
     return (
       <div
         className={
           fill
-            ? "relative flex h-full w-full flex-col items-center justify-center gap-2 bg-placeholder"
-            : "relative flex min-h-[120px] min-w-[120px] flex-col items-center justify-center gap-2 bg-placeholder"
+            ? "absolute inset-0 z-[1] flex flex-col items-center justify-center gap-3 bg-placeholder"
+            : "relative flex min-h-[120px] min-w-[120px] flex-col items-center justify-center gap-3 bg-placeholder"
         }
       >
-        {fallback ?? (
-          <span className="px-2 text-center text-xs text-subtle">
-            图片加载失败
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            retry();
-          }}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-card text-muted ring-1 ring-border transition hover:bg-accent/20 hover:text-accent hover:ring-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          aria-label="重新加载图片"
-          title="重试"
-        >
-          <RetryIcon className="h-4 w-4" />
-        </button>
+        <div className="flex flex-col items-center gap-3 px-3">
+          {fallback ?? (
+            <span className="text-center text-xs text-subtle">
+              图片加载失败
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              retry();
+            }}
+            className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs text-muted ring-1 ring-border transition hover:bg-accent/20 hover:text-accent hover:ring-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            aria-label="重新加载图片"
+            title="重试"
+          >
+            <RetryIcon className="h-3.5 w-3.5" />
+            <span>重试</span>
+          </button>
+        </div>
       </div>
     );
   }
