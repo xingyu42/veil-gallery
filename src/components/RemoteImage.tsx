@@ -16,6 +16,24 @@ interface Props {
   onError?: () => void;
 }
 
+function RetryIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M21 12a9 9 0 1 1-2.6-6.2" />
+      <path d="M21 3v6h-6" />
+    </svg>
+  );
+}
+
 /**
  * Upstream image component. Images are proxied through /api/image/[id] which
  * hits Vercel Edge + CDN — first request is MISS (Edge fetches upstream),
@@ -40,16 +58,46 @@ export default function RemoteImage({
 }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  /** Bumps on each retry so the browser re-requests (cache-bust query). */
+  const [attempt, setAttempt] = useState(0);
+
+  const src =
+    attempt === 0 ? imageUrl(id) : `${imageUrl(id)}?r=${attempt}`;
+
+  const retry = () => {
+    setFailed(false);
+    setLoaded(false);
+    setAttempt((n) => n + 1);
+  };
 
   if (failed) {
     return (
-      fallback ?? (
-        <div
-          className={`flex min-h-[120px] items-center justify-center bg-zinc-900 text-xs text-white/30 ${className}`}
+      <div
+        className={
+          fill
+            ? "relative flex h-full w-full flex-col items-center justify-center gap-2 bg-zinc-900"
+            : "relative flex min-h-[120px] min-w-[120px] flex-col items-center justify-center gap-2 bg-zinc-900"
+        }
+      >
+        {fallback ?? (
+          <span className="px-2 text-center text-xs text-white/30">
+            图片加载失败
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            retry();
+          }}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70 ring-1 ring-white/15 transition hover:bg-accent/20 hover:text-accent hover:ring-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          aria-label="重新加载图片"
+          title="重试"
         >
-          图片加载失败
-        </div>
-      )
+          <RetryIcon className="h-4 w-4" />
+        </button>
+      </div>
     );
   }
 
@@ -73,7 +121,8 @@ export default function RemoteImage({
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={imageUrl(id)}
+        key={attempt}
+        src={src}
         alt={alt}
         className={`${className} ${loaded ? "opacity-100" : "opacity-0"}`}
         loading="lazy"
