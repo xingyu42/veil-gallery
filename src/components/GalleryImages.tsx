@@ -149,7 +149,9 @@ export default function GalleryImages({ gallery }: Props) {
         loadingMore={loading}
         onClose={() => setActiveIndex(null)}
         onIndexChange={setActiveIndex}
-        onRequestMore={loadMore}
+        onRequestMore={() => {
+          void loadMore();
+        }}
       />
     </>
   );
