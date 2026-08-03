@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RemoteImage from "./RemoteImage";
 import AppLightbox from "./AppLightbox";
+import Masonry from "./Masonry";
 import { availableImages } from "@/lib/api";
 import type { GalleryDetail, GalleryImage, GalleryImagePage } from "@/lib/types";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
@@ -95,29 +96,42 @@ export default function GalleryImages({ gallery }: Props) {
 
   return (
     <>
-      {/* 横向填满：从左到右、从上到下，顺序即 1 → 2 → 3 → 4 */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {images.map((image, index) => (
-          <button
-            key={image.id}
-            type="button"
-            onClick={() => setActiveIndex(index)}
-            className="group relative aspect-[3/4] w-full cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
-            aria-label={`放大查看 ${gallery.title} 第 ${image.sort_order} 张`}
-          >
-            <RemoteImage
-              id={image.id}
-              alt={`${gallery.title} #${image.sort_order}`}
-              className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-95"
-            />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/20 group-hover:opacity-100">
-              <span className="keep-white rounded-full bg-black/55 px-3 py-1 text-xs text-white/90 backdrop-blur-sm">
-                点击放大
-              </span>
-            </div>
-          </button>
-        ))}
-      </div>
+      {/* CSS multi-column masonry — column-major flow */}
+      <Masonry>
+        {images.map((image, index) => {
+          const hasSize =
+            typeof image.width === "number" &&
+            typeof image.height === "number" &&
+            image.width > 0 &&
+            image.height > 0;
+
+          return (
+            <button
+              key={image.id}
+              type="button"
+              onClick={() => setActiveIndex(index)}
+              className="group relative mb-4 w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
+              style={{
+                aspectRatio: hasSize
+                  ? `${image.width} / ${image.height}`
+                  : "3 / 4",
+              }}
+              aria-label={`放大查看 ${gallery.title} 第 ${image.sort_order} 张`}
+            >
+              <RemoteImage
+                id={image.id}
+                alt={`${gallery.title} #${image.sort_order}`}
+                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-95"
+              />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/20 group-hover:opacity-100">
+                <span className="keep-white rounded-full bg-black/55 px-3 py-1 text-xs text-white/90 backdrop-blur-sm">
+                  点击放大
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </Masonry>
 
       <div ref={sentinelRef} className="flex min-h-24 items-center justify-center py-6">
         {loading && (
