@@ -4,8 +4,12 @@ import { USER_AGENT, upstreamImageUrl } from "@/lib/upstream";
 
 export const runtime = "edge";
 
-/** Upstream fetch budget — fail before platform kills the Edge invocation. */
-const UPSTREAM_TIMEOUT_MS = 8_000;
+/**
+ * Budget for upstream *headers* only. Once headers arrive we clear the timer
+ * so large bodies can stream past this window (AbortSignal.timeout would kill
+ * the body mid-transfer and surface as mass 504s).
+ */
+const UPSTREAM_HEADER_TIMEOUT_MS = 12_000;
 
 /** Browser + Vercel/CDN cache headers (dual CDN keys for platform quirks). */
 function cacheHeaders(browser: string, cdn: string): Record<string, string> {
@@ -28,7 +32,11 @@ const MISS_404_CACHE = cacheHeaders(
   "public, s-maxage=60, stale-while-revalidate=300"
 );
 
-/** Upstream timeout / 5xx / network — brief negative cache so cold MISS doesn't hammer. */
+/**
+ * Negative cache on gateway / upstream errors. 10s CDN TTL absorbs stampede;
+ * browser max-age=0 so clients can revalidate. Manual retry uses ?r= cache-bust
+ * and is not blocked by this window.
+ */
 const ERROR_CACHE = cacheHeaders(
   "public, max-age=0",
   "public, s-maxage=10, stale-while-revalidate=30"
@@ -48,6 +56,9 @@ const ERROR_CACHE = cacheHeaders(
  * - Subsequent requests: x-vercel-cache HIT, no function execution or rate limit check
  * - Hot images serve at CDN latency (~20-50ms globally)
  * - 404 / 502/504 get short negative cache so cold failures do not stampede upstream
+ *
+ * Timeout: abort only if upstream headers do not arrive in time. Body streaming
+ * is uncapped by this timer (platform still enforces Edge wall limits).
  *
  * Always GETs upstream (CF origins often disagree on HEAD vs GET) and strips the
  * body for client HEAD so curl -I / preflight still populate the same cache key.
@@ -101,11 +112,19 @@ async function proxyImage(
   const headers: HeadersInit = { "User-Agent": USER_AGENT };
   if (referer) headers.Referer = referer;
 
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    UPSTREAM_HEADER_TIMEOUT_MS
+  );
+
   try {
     const res = await fetch(upstreamImageUrl(id), {
       headers,
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      signal: controller.signal,
     });
+    // Headers received — do not abort the body stream for large/slow images.
+    clearTimeout(timer);
 
     if (res.status === 404) {
       return new NextResponse(null, { status: 404, headers: MISS_404_CACHE });
@@ -129,12 +148,14 @@ async function proxyImage(
       },
     });
   } catch (error) {
+    clearTimeout(timer);
+
     const timedOut =
       error instanceof Error &&
       (error.name === "TimeoutError" || error.name === "AbortError");
 
     console.error(
-      `[image-proxy] ${id}${timedOut ? " timeout" : ""}:`,
+      `[image-proxy] ${id}${timedOut ? " header-timeout" : ""}:`,
       error
     );
 
