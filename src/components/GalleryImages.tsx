@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RemoteImage from "./RemoteImage";
-import Lightbox from "./Lightbox";
+import AppLightbox from "./AppLightbox";
 import { availableImages } from "@/lib/api";
 import type { GalleryDetail, GalleryImage, GalleryImagePage } from "@/lib/types";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
@@ -89,26 +89,6 @@ export default function GalleryImages({ gallery }: Props) {
     return () => observer.disconnect();
   }, [error, hasMore, loadMore]);
 
-  const showPrevious = useCallback(() => {
-    setActiveIndex((current) =>
-      current === null ? null : Math.max(0, current - 1)
-    );
-  }, []);
-
-  const showNext = useCallback(async () => {
-    const current = activeIndex;
-    if (current === null) return;
-    if (current < imagesRef.current.length - 1) {
-      setActiveIndex(current + 1);
-      return;
-    }
-    if (!hasMore) return;
-
-    const oldLength = imagesRef.current.length;
-    const added = await loadMore();
-    if (added > 0) setActiveIndex(oldLength);
-  }, [activeIndex, hasMore, loadMore]);
-
   if (images.length === 0) {
     return <p className="py-16 text-center text-white/40">该图集暂无可用图片</p>;
   }
@@ -160,16 +140,16 @@ export default function GalleryImages({ gallery }: Props) {
         )}
       </div>
 
-      <Lightbox
+      <AppLightbox
         images={images}
         index={activeIndex}
         total={total}
+        title={gallery.title}
         canLoadMore={hasMore}
         loadingMore={loading}
-        title={gallery.title}
         onClose={() => setActiveIndex(null)}
-        onPrevious={showPrevious}
-        onNext={() => void showNext()}
+        onIndexChange={setActiveIndex}
+        onRequestMore={loadMore}
       />
     </>
   );
