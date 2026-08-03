@@ -117,7 +117,7 @@ export default function Lightbox({
 
   return (
     <div
-      className="keep-white fixed inset-0 z-[100] bg-black backdrop-blur-sm"
+      className="keep-white fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={`${title} 图片预览`}
