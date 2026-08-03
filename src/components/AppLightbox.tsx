@@ -19,9 +19,7 @@ interface Props {
   canLoadMore?: boolean;
   loadingMore?: boolean;
   onClose: () => void;
-  /** Sync controlled index back to parent */
   onIndexChange: (index: number) => void;
-  /** Called when user approaches the last loaded images */
   onRequestMore?: () => void | Promise<void>;
 }
 
@@ -55,7 +53,6 @@ export default function AppLightbox({
     [images, title]
   );
 
-  // Reset meta panel when lightbox closes
   useEffect(() => {
     if (!open) {
       setMetaOpen(false);
@@ -69,7 +66,6 @@ export default function AppLightbox({
     setMetaError(null);
   }, [current?.id]);
 
-  // Fetch metadata only when the panel is open
   useEffect(() => {
     if (!current || !metaOpen) return;
     let cancelled = false;
@@ -98,7 +94,6 @@ export default function AppLightbox({
     };
   }, [current, metaOpen]);
 
-  // Keyboard shortcut: I toggles metadata (same as old lightbox)
   useEffect(() => {
     if (!open) return;
     const handleKey = (event: KeyboardEvent) => {
@@ -113,7 +108,6 @@ export default function AppLightbox({
   const handleView = useCallback(
     ({ index: newIndex }: { index: number }) => {
       onIndexChange(newIndex);
-      // Prefetch next page when approaching the end
       if (
         canLoadMore &&
         !loadingMore &&
@@ -181,7 +175,6 @@ export default function AppLightbox({
         }}
       />
 
-      {/* Metadata slide-over — always dark surface (ignore page light theme) */}
       {open && metaOpen && (
         <div
           role="presentation"
@@ -191,21 +184,20 @@ export default function AppLightbox({
       )}
 
       <aside
-        className={`fixed inset-y-0 right-0 z-[10002] flex w-full max-w-sm flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
+        className={`theme-dark fixed inset-y-0 right-0 z-[10002] flex w-full max-w-sm flex-col border-l border-border shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
           open && metaOpen
             ? "translate-x-0"
             : "pointer-events-none translate-x-full"
         }`}
-        style={{ colorScheme: "dark" }}
         aria-hidden={!metaOpen}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-4">
-          <h2 className="text-xs tracking-[0.2em] text-[#c9a87c]">元数据</h2>
+        <div className="flex items-center justify-between border-b border-border px-4 py-4">
+          <h2 className="text-xs tracking-[0.2em] text-accent">元数据</h2>
           <button
             type="button"
             onClick={() => setMetaOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition hover:bg-card hover:text-foreground"
             aria-label="关闭元数据"
           >
             ×
@@ -213,41 +205,41 @@ export default function AppLightbox({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          {metaLoading && <p className="text-sm text-zinc-400">加载中…</p>}
+          {metaLoading && <p className="text-sm text-subtle">加载中…</p>}
 
           {!metaLoading && metaError && (
-            <p className="text-sm text-zinc-400">暂无元数据</p>
+            <p className="text-sm text-subtle">暂无元数据</p>
           )}
 
           {!metaLoading && !metaError && meta && (
             <dl className="space-y-4 text-sm">
               {sizeLabel && (
                 <div>
-                  <dt className="text-xs text-zinc-400">尺寸</dt>
-                  <dd className="mt-1 text-zinc-100">{sizeLabel}</dd>
+                  <dt className="text-xs text-subtle">尺寸</dt>
+                  <dd className="mt-1 text-foreground">{sizeLabel}</dd>
                 </div>
               )}
               {meta.orientation && (
                 <div>
-                  <dt className="text-xs text-zinc-400">方向</dt>
-                  <dd className="mt-1 capitalize text-zinc-100">
+                  <dt className="text-xs text-subtle">方向</dt>
+                  <dd className="mt-1 capitalize text-foreground">
                     {meta.orientation}
                   </dd>
                 </div>
               )}
               {meta.gallery && (
                 <div>
-                  <dt className="text-xs text-zinc-400">图集</dt>
+                  <dt className="text-xs text-subtle">图集</dt>
                   <dd className="mt-1">
                     <Link
                       href={`/gallery/${meta.gallery.id}`}
-                      className="text-[#c9a87c] transition hover:underline"
+                      className="text-accent transition hover:underline"
                       onClick={onClose}
                     >
                       {meta.gallery.title}
                     </Link>
                     {meta.gallery.category && (
-                      <p className="mt-1 text-xs text-zinc-500">
+                      <p className="mt-1 text-xs text-muted">
                         {meta.gallery.category}
                       </p>
                     )}
@@ -256,13 +248,13 @@ export default function AppLightbox({
               )}
               {meta.tags && meta.tags.length > 0 && (
                 <div>
-                  <dt className="text-xs text-zinc-400">标签</dt>
+                  <dt className="text-xs text-subtle">标签</dt>
                   <dd className="mt-2 flex flex-wrap gap-1.5">
                     {meta.tags.map((tag) => (
                       <Link
                         key={tag}
                         href={`/tag/${encodeURIComponent(tag)}`}
-                        className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-[#c9a87c]/60 hover:text-[#c9a87c]"
+                        className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted transition hover:border-accent/50 hover:text-accent"
                         onClick={onClose}
                       >
                         #{tag}
@@ -273,15 +265,15 @@ export default function AppLightbox({
               )}
               {current && (
                 <div>
-                  <dt className="text-xs text-zinc-400">图片 ID</dt>
-                  <dd className="mt-1 font-mono text-xs text-zinc-400">
+                  <dt className="text-xs text-subtle">图片 ID</dt>
+                  <dd className="mt-1 font-mono text-xs text-muted">
                     {current.id}
                   </dd>
                 </div>
               )}
               <div>
-                <dt className="text-xs text-zinc-400">位置</dt>
-                <dd className="mt-1 text-zinc-100">
+                <dt className="text-xs text-subtle">位置</dt>
+                <dd className="mt-1 text-foreground">
                   {(index ?? 0) + 1} / {total}
                 </dd>
               </div>
@@ -289,7 +281,7 @@ export default function AppLightbox({
           )}
 
           {!metaLoading && !metaError && !meta && (
-            <p className="text-sm text-zinc-400">暂无元数据</p>
+            <p className="text-sm text-subtle">暂无元数据</p>
           )}
         </div>
       </aside>
