@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { imageUrl } from "@/lib/api";
 
 interface Props {
@@ -49,6 +54,10 @@ function RetryIcon({ className = "" }: { className?: string }) {
  * - fill=false: shrink-wrap for lightbox so object-contain can center naturally.
  * - Hide the not-yet-decoded image with opacity only — never display:none,
  *   or loading="lazy" will skip the request entirely.
+ * - Disk/memory cache can finish before React attaches onLoad (or skip the
+ *   event). Sync-check img.complete after commit or the tile stays opacity-0
+ *   while Network still shows 200 (disk cache). Lightbox works because YARL
+ *   does not gate visibility on this state.
  */
 export default function RemoteImage({
   id,
@@ -66,11 +75,49 @@ export default function RemoteImage({
   const [failed, setFailed] = useState(false);
   /** Bumps on each retry so the browser re-requests (cache-bust query). */
   const [attempt, setAttempt] = useState(0);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  /** True after onLoad / onError / complete-check for the current src. */
+  const settledRef = useRef(false);
+  /** Track prop id without an extra render (not UI state). */
+  const prevIdRef = useRef(id);
 
-  const src =
-    attempt === 0 ? imageUrl(id) : `${imageUrl(id)}?r=${attempt}`;
+  if (prevIdRef.current !== id) {
+    prevIdRef.current = id;
+    setAttempt(0);
+    setLoaded(false);
+    setFailed(false);
+    settledRef.current = false;
+  }
+
+  const baseUrl = imageUrl(id);
+  const src = attempt === 0 ? baseUrl : `${baseUrl}?r=${attempt}`;
+
+  const settle = (ok: boolean) => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    if (ok) {
+      setLoaded(true);
+      onLoad?.();
+    } else {
+      setFailed(true);
+      onError?.();
+    }
+  };
+
+  // Recover when the browser serves from disk/memory cache and skips onLoad
+  // (or finishes before React attaches the listener). Layout phase avoids a
+  // placeholder flash on warm cache. Only promote success here — broken
+  // images still go through onError (complete+naturalWidth=0 is ambiguous
+  // with async decode).
+  useLayoutEffect(() => {
+    const img = imgRef.current;
+    if (!img || !img.complete) return;
+    if (img.naturalWidth > 0) settle(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settle closes over src + callbacks
+  }, [src]);
 
   const retry = () => {
+    settledRef.current = false;
     setFailed(false);
     setLoaded(false);
     setAttempt((n) => n + 1);
@@ -132,7 +179,8 @@ export default function RemoteImage({
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        key={attempt}
+        key={`${id}-${attempt}`}
+        ref={imgRef}
         src={src}
         alt={alt}
         className={`${className} ${loaded ? "opacity-100" : "opacity-0"}`}
@@ -141,14 +189,8 @@ export default function RemoteImage({
         decoding="async"
         draggable={draggable}
         referrerPolicy="no-referrer"
-        onLoad={() => {
-          setLoaded(true);
-          onLoad?.();
-        }}
-        onError={() => {
-          setFailed(true);
-          onError?.();
-        }}
+        onLoad={() => settle(true)}
+        onError={() => settle(false)}
       />
     </div>
   );
