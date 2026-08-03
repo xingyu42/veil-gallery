@@ -34,7 +34,7 @@ export default async function TagPage({ params }: Props) {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
       <div className="mb-8">
         <Link
           href="/tags"
@@ -61,23 +61,9 @@ export default async function TagPage({ params }: Props) {
         <TagPreviewImages imageIds={imageIds} tagName={decoded} />
       ) : (
         !error && (
-          <p className="py-20 text-center text-white/40">
-            该标签暂无预览图片
-          </p>
+          <p className="py-20 text-center text-white/40">该标签暂无预览图片</p>
         )
       )}
-
-      <div className="mt-10 text-center">
-        <p className="text-sm text-white/40">
-          提示：完整图集请前往「图集」页面浏览。
-        </p>
-        <Link
-          href="/galleries"
-          className="mt-4 inline-block rounded-full border border-accent/40 px-6 py-2.5 text-sm text-accent transition hover:bg-accent/10"
-        >
-          浏览全部图集
-        </Link>
-      </div>
     </div>
   );
 }
