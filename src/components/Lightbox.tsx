@@ -159,9 +159,9 @@ export default function Lightbox({
         </div>
       </div>
 
-      {/* Image stage — solid black so light-mode overrides cannot flash beige/white */}
+      {/* Image stage — transparent so outer bg-black/95 shows through */}
       <div
-        className="relative flex h-full w-full items-center justify-center bg-black p-3 pt-16 sm:p-6 sm:pt-16"
+        className="relative flex h-full w-full items-center justify-center p-3 pt-16 sm:p-6 sm:pt-16"
         onClick={onClose}
         onTouchStart={(event) => {
           touchStartX.current = event.changedTouches[0]?.clientX ?? null;
@@ -184,6 +184,7 @@ export default function Lightbox({
           ‹
         </button>
 
+        {/* Solid black only around the image itself — blocks light-mode flash on switch */}
         <div
           className="relative flex max-h-full max-w-full items-center justify-center bg-black"
           onClick={(event) => event.stopPropagation()}
