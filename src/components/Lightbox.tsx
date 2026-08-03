@@ -245,16 +245,8 @@ export default function Lightbox({
         aria-hidden={!metaOpen}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
+        <div className="border-b border-white/10 px-4 py-4">
           <h2 className="text-xs tracking-[0.2em] text-accent">元数据</h2>
-          <button
-            type="button"
-            onClick={() => setMetaOpen(false)}
-            className="rounded-full px-3 py-1.5 text-xs text-white/60 transition hover:bg-white/10 hover:text-white"
-            aria-label="收起元数据"
-          >
-            收起
-          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
