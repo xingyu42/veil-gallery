@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Masonry from "./Masonry";
 import RemoteImage from "./RemoteImage";
 import Lightbox from "./Lightbox";
 import { availableImages } from "@/lib/api";
@@ -116,19 +115,20 @@ export default function GalleryImages({ gallery }: Props) {
 
   return (
     <>
-      <Masonry className="gap-3">
+      {/* 横排网格：从左到右、从上到下，替代原来的多列瀑布流 */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
         {images.map((image, index) => (
           <button
             key={image.id}
             type="button"
             onClick={() => setActiveIndex(index)}
-            className="group relative mb-3 block w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
+            className="group relative aspect-[3/4] w-full cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 text-left ring-1 ring-white/5 transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
             aria-label={`放大查看 ${gallery.title} 第 ${image.sort_order} 张`}
           >
             <RemoteImage
               id={image.id}
               alt={`${gallery.title} #${image.sort_order}`}
-              className="w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-95"
+              className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-95"
             />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/20 group-hover:opacity-100">
               <span className="keep-white rounded-full bg-black/55 px-3 py-1 text-xs text-white/90 backdrop-blur-sm">
@@ -137,7 +137,7 @@ export default function GalleryImages({ gallery }: Props) {
             </div>
           </button>
         ))}
-      </Masonry>
+      </div>
 
       <div ref={sentinelRef} className="flex min-h-24 items-center justify-center py-6">
         {loading && (
