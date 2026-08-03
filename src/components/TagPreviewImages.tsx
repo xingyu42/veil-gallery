@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import RemoteImage from "./RemoteImage";
-import Masonry from "./Masonry";
 import Lightbox from "./Lightbox";
+import { describeUpstreamError } from "@/lib/upstream-error";
 import type { GalleryImage } from "@/lib/types";
 
 interface Props {
@@ -12,10 +13,14 @@ interface Props {
 }
 
 export default function TagPreviewImages({ imageIds, tagName }: Props) {
+  const [ids, setIds] = useState(imageIds);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const images = useMemo<GalleryImage[]>(
     () =>
-      imageIds.map((id, index) => ({
+      ids.map((id, index) => ({
         id,
         sort_order: index + 1,
         width: null,
@@ -24,27 +29,78 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
         status: "active",
         uploaded: true,
       })),
-    [imageIds]
+    [ids]
   );
+
+  const reshuffle = useCallback(async () => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/tag-preview?name=${encodeURIComponent(tagName)}`,
+        { cache: "no-store", signal: AbortSignal.timeout(15_000) }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const next = Array.isArray(body.image_ids) ? body.image_ids : [];
+      if (next.length === 0) {
+        throw new Error("暂无预览图片");
+      }
+      setIds(next);
+      setActiveIndex(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "换一批失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, tagName]);
 
   return (
     <>
-      <Masonry>
+      {/* Fixed 2×3 grid — API returns at most 6 ids; avoid CSS columns empty space */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         {images.map((image, index) => (
           <button
-            key={image.id}
+            key={`${image.id}-${index}`}
             type="button"
             onClick={() => setActiveIndex(index)}
-            className="group relative mb-4 block w-full break-inside-avoid cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 ring-1 ring-white/10 transition hover:ring-accent/40"
+            className="group relative aspect-[3/4] w-full cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 ring-1 ring-white/10 transition hover:ring-accent/40"
           >
             <RemoteImage
               id={image.id}
               alt={`${tagName} #${index + 1}`}
-              className="w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+              className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+              placeholderClassName="h-full w-full animate-pulse bg-zinc-900"
             />
           </button>
         ))}
-      </Masonry>
+      </div>
+
+      <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => void reshuffle()}
+          disabled={loading}
+          className="rounded-full bg-accent/10 px-6 py-2.5 text-sm text-accent ring-1 ring-accent/40 transition hover:ring-accent/70 disabled:opacity-50"
+        >
+          {loading ? "加载中…" : "换一批"}
+        </button>
+        <Link
+          href="/galleries"
+          className="rounded-full border border-accent/40 px-6 py-2.5 text-sm text-accent transition hover:bg-accent/10"
+        >
+          浏览全部图集
+        </Link>
+      </div>
+
+      {error && (
+        <p className="mt-4 text-center text-sm text-status-danger">
+          {describeUpstreamError(error, "此接口限流较严，请稍后再试")}
+        </p>
+      )}
 
       <Lightbox
         images={images}
