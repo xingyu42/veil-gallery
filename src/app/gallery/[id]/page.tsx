@@ -64,14 +64,9 @@ export default async function GalleryPage({ params }: Props) {
             </h1>
             {gallery.category && (
               <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/50">
-                <Link
-                  href={`/galleries?category=${encodeURIComponent(
-                    gallery.category
-                  )}`}
-                  className="rounded-full bg-white/5 px-3 py-1 hover:bg-white/10"
-                >
+                <span className="rounded-full bg-white/5 px-3 py-1">
                   {gallery.category}
-                </Link>
+                </span>
               </div>
             )}
           </div>
