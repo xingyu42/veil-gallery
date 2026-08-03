@@ -1,11 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import RemoteImage from "./RemoteImage";
 import AppLightbox from "./AppLightbox";
-import { describeUpstreamError } from "@/lib/upstream-error";
+import {
+  describeUpstreamError,
+  TAG_PREVIEW_RATE_LIMIT_MESSAGE,
+} from "@/lib/upstream-error";
 import type { GalleryImage } from "@/lib/types";
+
+/** Client-side cooldown between "换一批" to reduce accidental stampede. */
+const RESHUFFLE_COOLDOWN_SEC = 5;
 
 interface Props {
   imageIds: number[];
@@ -17,6 +23,16 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cooldownSec, setCooldownSec] = useState(0);
+
+  useEffect(() => {
+    if (cooldownSec <= 0) return;
+    const timer = window.setTimeout(
+      () => setCooldownSec((s) => Math.max(0, s - 1)),
+      1000
+    );
+    return () => window.clearTimeout(timer);
+  }, [cooldownSec]);
 
   const images = useMemo<GalleryImage[]>(
     () =>
@@ -33,7 +49,8 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
   );
 
   const reshuffle = useCallback(async () => {
-    if (loading) return;
+    if (loading || cooldownSec > 0) return;
+
     setLoading(true);
     setError(null);
     try {
@@ -51,12 +68,15 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
       }
       setIds(next);
       setActiveIndex(null);
+      setCooldownSec(RESHUFFLE_COOLDOWN_SEC);
     } catch (e) {
       setError(e instanceof Error ? e.message : "换一批失败");
     } finally {
       setLoading(false);
     }
-  }, [loading, tagName]);
+  }, [loading, cooldownSec, tagName]);
+
+  const busy = loading || cooldownSec > 0;
 
   return (
     <>
@@ -82,10 +102,14 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
         <button
           type="button"
           onClick={() => void reshuffle()}
-          disabled={loading}
+          disabled={busy}
           className="rounded-full bg-accent/10 px-6 py-2.5 text-sm text-accent ring-1 ring-accent/40 transition hover:ring-accent/70 disabled:opacity-50"
         >
-          {loading ? "加载中…" : "换一批"}
+          {loading
+            ? "加载中…"
+            : cooldownSec > 0
+              ? `请稍候 ${cooldownSec}s`
+              : "换一批"}
         </button>
         <Link
           href="/galleries"
@@ -97,7 +121,7 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
 
       {error && (
         <p className="mt-4 text-center text-sm text-status-danger">
-          {describeUpstreamError(error, "此接口限流较严，请稍后再试")}
+          {describeUpstreamError(error, TAG_PREVIEW_RATE_LIMIT_MESSAGE)}
         </p>
       )}
 

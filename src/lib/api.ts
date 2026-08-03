@@ -10,14 +10,33 @@ import type {
   FeaturedTag,
   ImageMeta,
 } from "./types";
+import {
+  consumeTagPreviewRateLimit,
+  consumeUpstreamRateLimit,
+} from "./rate-limit";
 import { USER_AGENT, upstreamUrl } from "./upstream";
-import { getUpstreamError } from "./upstream-error";
+import {
+  getUpstreamError,
+  isUpstreamRateLimitError,
+  UPSTREAM_FORBIDDEN,
+} from "./upstream-error";
 
+/**
+ * JSON upstream fetch. Consumes one shared per-region quota unit before fetch
+ * (same bucket as image MISS / random / calibrate). Tag-preview uses a stricter
+ * dedicated bucket in addition — see getTagPreview / /api/tag-preview.
+ *
+ * Note: Next data-cache may still satisfy the subsequent fetch without a network
+ * hop; we intentionally charge first (conservative). Prefer route/CDN cache so
+ * handlers are not re-entered on hot paths.
+ */
 async function apiFetch<T>(
   path: string,
   revalidateSeconds = 900,
   opts?: { timeoutMs?: number }
 ): Promise<T> {
+  await consumeUpstreamRateLimit();
+
   const res = await fetch(upstreamUrl(path), {
     next: { revalidate: revalidateSeconds },
     headers: {
@@ -201,6 +220,9 @@ function randomGalleryToListItem(
 
 async function fetchOneRandomGallery(): Promise<GalleryListItem | null> {
   try {
+    // One quota unit per parallel random call (same bucket as apiFetch / images).
+    await consumeUpstreamRateLimit();
+
     const res = await fetch(upstreamUrl("/v1/gallery/random"), {
       cache: "no-store",
       headers: {
@@ -219,8 +241,8 @@ async function fetchOneRandomGallery(): Promise<GalleryListItem | null> {
   } catch (error) {
     // Surface rate-limit / forbidden to callers; soft-fail other errors in batch.
     if (
-      error instanceof Error &&
-      (error.message === "RATE_LIMIT" || error.message === "UPSTREAM_FORBIDDEN")
+      isUpstreamRateLimitError(error) ||
+      (error instanceof Error && error.message === UPSTREAM_FORBIDDEN)
     ) {
       throw error;
     }
@@ -362,10 +384,15 @@ export async function getImageMeta(
   return apiFetch(`/v1/image/${id}/meta`, 86400);
 }
 
+/**
+ * Tag preview — upstream is stricter (60 / 300s / IP). Charge the dedicated
+ * bucket first, then the shared IP bucket via apiFetch.
+ */
 export async function getTagPreview(
   name: string
 ): Promise<{ image_ids: number[] }> {
-  return apiFetch(`/v1/tag/${encodeURIComponent(name)}/preview`, 3600);
+  await consumeTagPreviewRateLimit();
+  return apiFetch(`/v1/tag/${encodeURIComponent(name)}/preview`, 1800);
 }
 
 export function imageUrl(id: number | string): string {

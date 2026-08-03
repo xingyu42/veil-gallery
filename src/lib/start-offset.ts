@@ -1,4 +1,5 @@
 import { isDisplayableGallery } from "./api";
+import { consumeUpstreamRateLimit } from "./rate-limit";
 import { getRedis } from "./redis";
 import type { GalleryListItem } from "./types";
 import { USER_AGENT, upstreamUrl } from "./upstream";
@@ -129,6 +130,9 @@ export function getDefaultStartOffset() {
 }
 
 async function fetchPage(offset: number, limit: number) {
+  // Calibration shares the global upstream budget so cron cannot starve image MISS.
+  await consumeUpstreamRateLimit();
+
   const res = await fetch(
     upstreamUrl(`/v1/galleries?limit=${limit}&offset=${offset}`),
     {

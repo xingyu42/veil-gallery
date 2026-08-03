@@ -67,7 +67,7 @@ cp .env.example .env.local
 | 无限滚动 | `IntersectionObserver` + `/api/galleries` |
 | 主题切换 | 自实现 ThemeProvider + localStorage + CSS 变量 |
 | 图片灯箱 | [yet-another-react-lightbox](https://github.com/igordanchenko/yet-another-react-lightbox)（`AppLightbox`）+ 自定义元数据侧栏，元数据走 `/api/image/[id]/meta` |
-| 限流保护 | 图片走 Edge 代理 + Upstash Redis 按区域限流（100 次/5 分钟/区域） + CDN 永久缓存；JSON `revalidate` + API Route 缓存 |
+| 限流保护 | 共享桶 100/5min/区域 + tag-preview 专属 60/5min/区域；图片 CDN 永久缓存；JSON `revalidate` / Route 缓存 |
 | 图集列表 / 随机预览 | CSS Grid（1–4 列） |
 | 图集详情瀑布流 | 最短列算法（`ShortestColumnMasonry`），保持 1→2→3→4 阅读顺序 |
 
@@ -101,12 +101,18 @@ src/
 
 ## 注意事项
 
-- API 限流约 100 次 / 5 分钟（IP 级）。服务端缓存请勿随意缩短。
-- 图片走 **Edge 代理 + 按区域限流 + CDN**：
-  - 服务端通过 Upstash Redis 按 Vercel 区域限流（100 次/5 分钟/区域）
-  - 每个 Vercel Edge 区域有独立出口 IP 池,按区域限流可确保单个 IP 不超过源站限制（100/5min）
-  - CDN MISS 时回源前先检查区域配额，超限返回 429
-  - CDN HIT 时不经过限流检查，纯 CDN 响应
-  - 免费版 Upstash 支持 ~166K 次图片请求/月（约 115 张/小时，多区域叠加）
+- 上游限流约 100 次 / 5 分钟（IP 级）。服务端缓存请勿随意缩短。
+- **共享上游配额**（图片 MISS + 通用 JSON）：
+  - Upstash：100 次 / 5 分钟 / Vercel 区域（`rl:upstream`）
+  - 扣费点：`apiFetch`、随机图集、startOffset 探针、图片代理 MISS
+  - 策略：回源前扣费（保守）；Next data-cache 命中时也可能已扣 1 次
+  - 图片 CDN HIT / Route 级 CDN HIT：不进函数，不扣费
+  - 超限：HTTP 429 + `Retry-After` / `X-RateLimit-*`
+  - Redis 未配置或故障：fail-open（放行）
+- **tag-preview 专属**（`/v1/tag/.../preview`，对齐上游 60/5min，**不镜像上游 ban**）：
+  - 独立桶 `rl:tag-preview`：60 次 / 5 分钟 / 区域
+  - 扣费：`getTagPreview` + `/api/tag-preview`（先专属桶，再共享桶）
+  - 「换一批」客户端冷却 5s，降低误触
+  - 免费档约 ~166K 次限流检查/月（两桶合计命令消耗更高）
 - 部分图集封面可能 404（源站未上传完成），已做空状态处理。
 - 内容含成人向写真，请遵守平台与当地法规。

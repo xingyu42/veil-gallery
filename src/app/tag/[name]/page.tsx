@@ -2,7 +2,11 @@ import Link from "next/link";
 import { getTagPreview } from "@/lib/api";
 import TagPreviewImages from "@/components/TagPreviewImages";
 import type { Metadata } from "next";
-import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
+import {
+  describeUpstreamError,
+  getErrorMessage,
+  TAG_PREVIEW_RATE_LIMIT_MESSAGE,
+} from "@/lib/upstream-error";
 
 export const revalidate = 1800;
 
@@ -53,7 +57,7 @@ export default async function TagPage({ params }: Props) {
 
       {error && (
         <div className="mb-8 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-status-danger">
-          {describeUpstreamError(error, "此接口限流较严，请稍后再试")}
+          {describeUpstreamError(error, TAG_PREVIEW_RATE_LIMIT_MESSAGE)}
         </div>
       )}
 

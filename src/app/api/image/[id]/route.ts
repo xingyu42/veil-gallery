@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkUpstreamRateLimit } from "@/lib/rate-limit";
+import { rateLimitResponseHeaders } from "@/lib/upstream-error";
 import { USER_AGENT, upstreamImageUrl } from "@/lib/upstream";
 
 export const runtime = "edge";
@@ -45,8 +46,9 @@ const ERROR_CACHE = cacheHeaders(
 /**
  * Proxies upstream images through Vercel Edge + CDN with per-region rate limiting.
  *
- * Rate limit layer (Upstash Redis sliding window):
- * - 100 req / 5 min per Vercel Edge region (matches upstream limit)
+ * Rate limit layer (shared with JSON upstream via `rl:upstream`):
+ * - 100 req / 5 min per Vercel region (matches upstream limit)
+ * - Image MISS + live JSON fetches share the same sliding-window bucket
  * - Each region has its own outbound IP pool, so we limit each separately
  * - On limit exceed: returns 429 with Retry-After header
  * - On Redis failure: fails open (allows request) to prevent outage
@@ -89,22 +91,13 @@ async function proxyImage(
   }
 
   // Per-region rate limit (each Vercel region has its own outbound IP pool)
-  const region = process.env.VERCEL_REGION || "dev";
-  const rateLimit = await checkUpstreamRateLimit(region);
+  const rateLimit = await checkUpstreamRateLimit();
 
   if (!rateLimit.allowed) {
-    const retryAfter = Math.ceil(rateLimit.resetMs / 1000);
+    // Do not cache 429 — limit window is dynamic.
     return new NextResponse("Rate Limit Exceeded", {
       status: 429,
-      headers: {
-        "Retry-After": retryAfter.toString(),
-        "X-RateLimit-Limit": rateLimit.limit.toString(),
-        "X-RateLimit-Remaining": "0",
-        "X-RateLimit-Reset": Math.ceil(
-          (Date.now() + rateLimit.resetMs) / 1000
-        ).toString(),
-        // Do not cache 429 — limit window is dynamic.
-      },
+      headers: rateLimitResponseHeaders(rateLimit.resetMs, rateLimit.limit),
     });
   }
 

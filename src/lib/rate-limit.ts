@@ -1,43 +1,69 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { getRedis } from "./redis";
+import { UpstreamRateLimitError } from "./upstream-error";
 
 /**
- * Per-region rate limiter for upstream image fetches.
+ * Per-region rate limiters for upstream traffic.
  *
- * Uses Upstash Redis with sliding window algorithm. Each Vercel Edge region
- * has its own outbound IP pool, so we limit each region separately to prevent
- * any single IP from exceeding upstream's rate limit.
+ * 1) Shared bucket (`rl:upstream`): all image MISS + JSON — 100 / 300s / region
+ *    Aligns with the generic upstream IP budget.
+ * 2) Tag-preview bucket (`rl:tag-preview`): only `/v1/tag/.../preview`
+ *    — 60 / 300s / region (stricter endpoint policy; no local ban tracking).
  *
- * Upstream limit: ~100 req / 5 min per IP.
- * Our target: 100 req / 5 min per region (match upstream limit).
- *
- * Cost (Upstash free tier):
- * - 500K commands/month free
- * - Each limit check = ~3 commands (ZADD + ZREMRANGEBYSCORE + ZCARD)
- * - Free tier supports ~166K image fetches/month across all regions
+ * Fail-open when Redis is missing or errors.
  */
 
-let ratelimit: Ratelimit | null = null;
+const SHARED_LIMIT = 100;
+const SHARED_WINDOW = "300 s";
 
-function getRatelimiter() {
-  if (ratelimit) return ratelimit;
+const TAG_PREVIEW_LIMIT = 60;
+const TAG_PREVIEW_WINDOW = "300 s";
 
+let sharedLimiter: Ratelimit | null = null;
+let tagPreviewLimiter: Ratelimit | null = null;
+let redisWarned = false;
+
+function warnNoRedisOnce() {
+  if (redisWarned) return;
+  redisWarned = true;
+  console.warn(
+    "[rate-limit] Redis env not set (UPSTASH_* or KV_REST_API_*) — rate limiting DISABLED"
+  );
+}
+
+function createLimiter(
+  limit: number,
+  window: `${number} s`,
+  prefix: string
+): Ratelimit | null {
   const redis = getRedis();
   if (!redis) {
-    console.warn(
-      "[rate-limit] Redis env not set (UPSTASH_* or KV_REST_API_*) — rate limiting DISABLED"
-    );
+    warnNoRedisOnce();
     return null;
   }
 
-  ratelimit = new Ratelimit({
+  return new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(100, "300 s"), // 100 requests per 5 minutes
-    analytics: false, // Disable to save commands
-    prefix: "rl:upstream",
+    limiter: Ratelimit.slidingWindow(limit, window),
+    analytics: false,
+    prefix,
   });
+}
 
-  return ratelimit;
+function getSharedLimiter() {
+  if (sharedLimiter) return sharedLimiter;
+  sharedLimiter = createLimiter(SHARED_LIMIT, SHARED_WINDOW, "rl:upstream");
+  return sharedLimiter;
+}
+
+function getTagPreviewLimiter() {
+  if (tagPreviewLimiter) return tagPreviewLimiter;
+  tagPreviewLimiter = createLimiter(
+    TAG_PREVIEW_LIMIT,
+    TAG_PREVIEW_WINDOW,
+    "rl:tag-preview"
+  );
+  return tagPreviewLimiter;
 }
 
 export interface RateLimitResult {
@@ -47,39 +73,85 @@ export interface RateLimitResult {
   resetMs: number;
 }
 
-/**
- * Check if an upstream fetch is allowed under the per-region rate limit.
- *
- * Each Vercel Edge region has its own outbound IP pool. We limit each region
- * separately to 100 req/5min (matching upstream's limit per IP).
- *
- * Region identifier comes from process.env.VERCEL_REGION (e.g., "iad1", "hnd1").
- * If unavailable (local dev), falls back to "dev".
- */
-export async function checkUpstreamRateLimit(
-  region: string
-): Promise<RateLimitResult> {
-  const limiter = getRatelimiter();
+function currentRegion(): string {
+  return process.env.VERCEL_REGION || "dev";
+}
 
+async function runLimit(
+  limiter: Ratelimit | null,
+  key: string,
+  fallbackLimit: number
+): Promise<RateLimitResult> {
   if (!limiter) {
-    // Rate limiting not configured — allow but log warning
-    return { allowed: true, limit: 100, remaining: 100, resetMs: 0 };
+    return {
+      allowed: true,
+      limit: fallbackLimit,
+      remaining: fallbackLimit,
+      resetMs: 0,
+    };
   }
 
   try {
-    const { success, limit, remaining, reset } = await limiter.limit(
-      `region:${region}`
-    );
-
+    const { success, limit, remaining, reset } = await limiter.limit(key);
     return {
       allowed: success,
       limit,
       remaining,
-      resetMs: reset - Date.now(),
+      resetMs: Math.max(0, reset - Date.now()),
     };
   } catch (error) {
-    // Redis failure — fail open (allow request) to prevent service outage
     console.error("[rate-limit] Redis error:", error);
-    return { allowed: true, limit: 100, remaining: -1, resetMs: 0 };
+    return { allowed: true, limit: fallbackLimit, remaining: -1, resetMs: 0 };
   }
+}
+
+async function consume(
+  check: (region: string) => Promise<RateLimitResult>,
+  region: string
+): Promise<RateLimitResult> {
+  const result = await check(region);
+  if (!result.allowed) {
+    throw new UpstreamRateLimitError(result.resetMs);
+  }
+  return result;
+}
+
+/**
+ * Shared per-region quota (images + generic JSON).
+ * Non-throwing — image proxy needs raw result for 429 headers.
+ */
+export async function checkUpstreamRateLimit(
+  region: string = currentRegion()
+): Promise<RateLimitResult> {
+  return runLimit(getSharedLimiter(), `region:${region}`, SHARED_LIMIT);
+}
+
+/**
+ * Consume one unit of the shared per-region upstream quota.
+ * Throws UpstreamRateLimitError when the window is exhausted.
+ */
+export async function consumeUpstreamRateLimit(
+  region: string = currentRegion()
+): Promise<RateLimitResult> {
+  return consume(checkUpstreamRateLimit, region);
+}
+
+/** Tag-preview endpoint quota: 60 / 300s / region (does not track upstream ban). */
+function checkTagPreviewRateLimit(
+  region: string = currentRegion()
+): Promise<RateLimitResult> {
+  return runLimit(
+    getTagPreviewLimiter(),
+    `region:${region}`,
+    TAG_PREVIEW_LIMIT
+  );
+}
+
+/**
+ * Consume tag-preview quota. Throws UpstreamRateLimitError when exhausted.
+ */
+export async function consumeTagPreviewRateLimit(
+  region: string = currentRegion()
+): Promise<RateLimitResult> {
+  return consume(checkTagPreviewRateLimit, region);
 }
