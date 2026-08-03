@@ -13,20 +13,13 @@ function CoverPlaceholder({ label }: { label: string }) {
 export default function GalleryCard({ gallery }: { gallery: GalleryListItem }) {
   const coverId = gallery.cover?.image_id;
   const title = gallery.title || `Gallery #${gallery.id}`;
-  const w = gallery.cover?.width;
-  const h = gallery.cover?.height;
-  const hasSize =
-    typeof w === "number" && typeof h === "number" && w > 0 && h > 0;
 
   return (
     <Link
       href={`/gallery/${gallery.id}`}
       className="group relative block overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition duration-300 hover:ring-accent/50"
     >
-      <div
-        className="relative w-full overflow-hidden bg-zinc-900"
-        style={{ aspectRatio: hasSize ? `${w} / ${h}` : "3 / 4" }}
-      >
+      <div className="relative aspect-[3/4] w-full overflow-hidden bg-zinc-900">
         {coverId ? (
           <RemoteImage
             id={coverId}
