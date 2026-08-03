@@ -116,13 +116,6 @@ export default function GalleryImages({ gallery }: Props) {
 
   return (
     <>
-      <p
-        className="mb-4 text-right text-xs text-[color:var(--muted)]"
-        aria-live="polite"
-      >
-        已加载 {images.length} / {total} 张
-      </p>
-
       <Masonry className="gap-3">
         {images.map((image, index) => (
           <button
