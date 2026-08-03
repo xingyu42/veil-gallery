@@ -6,7 +6,7 @@
 
 - 首页：品牌与站点规模 + 精选分类 / 标签 + 图集预览
 - 图集列表：分类筛选 + **无限滚动**
-- 图集详情：瀑布流图片，**点击打开灯箱 + 显示元数据**（尺寸、图集、标签）
+- 图集详情：最短列瀑布流图片，**点击打开灯箱 + 显示元数据**（尺寸、图集、标签）
 - 标签列表 + 标签预览（同样支持灯箱）
 - **暗色 / 亮色主题切换**（右上角按钮，记住偏好）
 - 图片通过 `/api/image/[id]` 代理，走 **Vercel Edge + CDN 缓存**，首次 MISS 回源，后续 HIT 纯 CDN
@@ -68,7 +68,8 @@ cp .env.example .env.local
 | 主题切换 | 自实现 ThemeProvider + localStorage + CSS 变量 |
 | 图片灯箱 | [yet-another-react-lightbox](https://github.com/igordanchenko/yet-another-react-lightbox)（`AppLightbox`）+ 自定义元数据侧栏，元数据走 `/api/image/[id]/meta` |
 | 限流保护 | 图片走 Edge 代理 + Upstash Redis 按区域限流（100 次/5 分钟/区域） + CDN 永久缓存；JSON `revalidate` + API Route 缓存 |
-| 瀑布流 | 纯 CSS `columns`，无额外依赖 |
+| 图集列表 / 随机预览 | CSS Grid（1–4 列） |
+| 图集详情瀑布流 | 最短列算法（`ShortestColumnMasonry`），保持 1→2→3→4 阅读顺序 |
 
 ## 目录结构
 
@@ -83,8 +84,10 @@ src/
     api/image/[id]/route.ts     # Edge 图片代理（Vercel CDN 缓存）
     api/galleries/route.ts      # 客户端分页代理
   components/
-    InfiniteGalleries.tsx       # 无限滚动客户端组件
-    GalleryImages.tsx           # 图集图片 + 灯箱
+    InfiniteGalleries.tsx       # 无限滚动客户端组件（Grid）
+    RandomGalleries.tsx         # 随机图集（Grid）
+    GalleryImages.tsx           # 图集图片瀑布流 + 灯箱
+    ShortestColumnMasonry.tsx   # 最短列瀑布流
     RemoteImage.tsx             # 源站图片统一入口（骨架占位）
     AppLightbox.tsx             # yet-another-react-lightbox 封装 + 元数据面板
     ThemeProvider.tsx
