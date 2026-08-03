@@ -66,7 +66,7 @@ cp .env.example .env.local
 |------|------|
 | 无限滚动 | `IntersectionObserver` + `/api/galleries` |
 | 主题切换 | 自实现 ThemeProvider + localStorage + CSS 变量 |
-| 图片灯箱 | 客户端 Lightbox，元数据走 `/api/image-meta/[id]` |
+| 图片灯箱 | [yet-another-react-lightbox](https://github.com/igordanchenko/yet-another-react-lightbox)（`AppLightbox`）+ 自定义元数据侧栏，元数据走 `/api/image/[id]/meta` |
 | 限流保护 | 图片走 Edge 代理 + Upstash Redis 按区域限流（100 次/5 分钟/区域） + CDN 永久缓存；JSON `revalidate` + API Route 缓存 |
 | 瀑布流 | 纯 CSS `columns`，无额外依赖 |
 
@@ -86,7 +86,7 @@ src/
     InfiniteGalleries.tsx       # 无限滚动客户端组件
     GalleryImages.tsx           # 图集图片 + 灯箱
     RemoteImage.tsx             # 源站图片统一入口（骨架占位）
-    Lightbox.tsx                # 灯箱 + 元数据面板
+    AppLightbox.tsx             # yet-another-react-lightbox 封装 + 元数据面板
     ThemeProvider.tsx
     Header.tsx                  # 含主题切换
     FilterBar.tsx               # 平滑分类筛选
