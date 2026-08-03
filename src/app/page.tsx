@@ -3,9 +3,8 @@ import { redirect } from "next/navigation";
 import {
   getSiteConfig,
   getFeaturedTags,
-  getGalleries,
+  getRandomGalleries,
 } from "@/lib/api";
-import { getStartOffset } from "@/lib/start-offset";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import FeaturedBar from "@/components/FeaturedBar";
 import GalleryCard from "@/components/GalleryCard";
@@ -25,22 +24,20 @@ export default async function HomePage({ searchParams }: Props) {
     redirect(`/galleries?category=${encodeURIComponent(legacyCategory)}`);
   }
 
-  const startOffset = await getStartOffset();
-
   let config = null;
   let featuredTags: { id: number; name: string; normalized_name: string }[] = [];
-  let galleries = null;
+  let galleries: Awaited<ReturnType<typeof getRandomGalleries>> = [];
   let error: string | null = null;
 
   try {
-    const [cfg, tags, gals] = await Promise.all([
+    const [cfg, tags, randomGalleries] = await Promise.all([
       getSiteConfig(),
       getFeaturedTags(),
-      getGalleries(12, startOffset),
+      getRandomGalleries(8),
     ]);
     config = cfg;
     featuredTags = tags.items || [];
-    galleries = gals;
+    galleries = randomGalleries;
   } catch (e) {
     error = getErrorMessage(e, "加载失败");
   }
@@ -115,9 +112,9 @@ export default async function HomePage({ searchParams }: Props) {
             全部图集 →
           </Link>
         </div>
-        {galleries && galleries.items.length > 0 ? (
+        {galleries.length > 0 ? (
           <Masonry>
-            {galleries.items.slice(0, 6).map((gallery) => (
+            {galleries.map((gallery) => (
               <GalleryCard key={gallery.id} gallery={gallery} />
             ))}
           </Masonry>
