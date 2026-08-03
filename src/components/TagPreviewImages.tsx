@@ -60,20 +60,19 @@ export default function TagPreviewImages({ imageIds, tagName }: Props) {
 
   return (
     <>
-      {/* Fixed 2×3 grid — API returns at most 6 ids; avoid CSS columns empty space */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         {images.map((image, index) => (
           <button
             key={`${image.id}-${index}`}
             type="button"
             onClick={() => setActiveIndex(index)}
-            className="group relative aspect-[3/4] w-full cursor-zoom-in overflow-hidden rounded-lg bg-zinc-900 ring-1 ring-white/10 transition hover:ring-accent/40"
+            className="group relative aspect-[3/4] w-full cursor-zoom-in overflow-hidden rounded-lg bg-placeholder ring-1 ring-border transition hover:ring-accent/40"
           >
             <RemoteImage
               id={image.id}
               alt={`${tagName} #${index + 1}`}
               className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-              placeholderClassName="h-full w-full animate-pulse bg-zinc-900"
+              placeholderClassName="h-full w-full animate-pulse bg-placeholder"
             />
           </button>
         ))}
