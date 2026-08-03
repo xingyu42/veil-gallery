@@ -19,12 +19,11 @@ interface Props {
  * hits Vercel Edge + CDN — first request is MISS (Edge fetches upstream),
  * subsequent requests are HIT (pure CDN, no function execution or upstream traffic).
  *
- * No client-side throttling needed; rate-limit pressure shifts to Vercel's
- * shared outbound pool, and hot images serve at global CDN latency.
- *
- * IMPORTANT: do not use `display: none` (Tailwind `hidden`) before load when
- * combined with loading="lazy". Browsers skip fetching display:none lazy
- * images, so onLoad never fires and the skeleton stays forever.
+ * Layout contract:
+ * - Always render one relative wrapper so parent aspect-ratio / CSS columns
+ *   see a stable box (no absolute ↔ in-flow swap on load).
+ * - Hide the not-yet-decoded image with opacity only — never display:none,
+ *   or loading="lazy" will skip the request entirely.
  */
 export default function RemoteImage({
   id,
@@ -52,15 +51,18 @@ export default function RemoteImage({
   }
 
   return (
-    <>
-      {!loaded && <div className={placeholderClassName} aria-hidden />}
+    <div className="relative block h-full w-full">
+      {!loaded && (
+        <div
+          className={`absolute inset-0 ${placeholderClassName}`}
+          aria-hidden
+        />
+      )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={imageUrl(id)}
         alt={alt}
-        // opacity-0 keeps layout size so loading="lazy" still fetches;
-        // Tailwind `hidden` (display:none) would block the request entirely.
-        className={loaded ? className : `${className} opacity-0 absolute inset-0 h-full w-full`.trim()}
+        className={`${className} ${loaded ? "opacity-100" : "opacity-0"}`}
         loading="lazy"
         decoding="async"
         draggable={draggable}
@@ -74,6 +76,6 @@ export default function RemoteImage({
           onError?.();
         }}
       />
-    </>
+    </div>
   );
 }
