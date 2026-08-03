@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GalleryCard from "./GalleryCard";
+import ShortestColumnMasonry, {
+  relativeHeight,
+  type MasonryItem,
+} from "./ShortestColumnMasonry";
 import { describeUpstreamError } from "@/lib/upstream-error";
 import type { GalleryListItem } from "@/lib/types";
 
@@ -156,6 +160,17 @@ export default function RandomGalleries({
     setError(null);
   }, [initial, category]);
 
+  const masonryItems = useMemo<MasonryItem<GalleryListItem>[]>(
+    () =>
+      items.map((g) => ({
+        key: `${g.id}-${g.cover?.image_id ?? "none"}`,
+        data: g,
+        weight: relativeHeight(g.cover?.width, g.cover?.height),
+        render: (gallery) => <GalleryCard gallery={gallery} />,
+      })),
+    [items]
+  );
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -170,11 +185,7 @@ export default function RandomGalleries({
         <span className="text-xs text-white/30">下拉自动加载更多</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {items.map((g) => (
-          <GalleryCard key={`${g.id}-${g.cover?.image_id}`} gallery={g} />
-        ))}
-      </div>
+      <ShortestColumnMasonry items={masonryItems} gapClassName="gap-4" />
 
       <div
         ref={sentinelRef}
