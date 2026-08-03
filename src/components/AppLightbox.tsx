@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Lightbox from "yet-another-react-lightbox";
 import Counter from "yet-another-react-lightbox/plugins/counter";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
@@ -34,6 +34,7 @@ export default function AppLightbox({
   onIndexChange,
   onRequestMore,
 }: Props) {
+  const router = useRouter();
   const [metaOpen, setMetaOpen] = useState(false);
   const [meta, setMeta] = useState<ImageMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
@@ -118,6 +119,16 @@ export default function AppLightbox({
       }
     },
     [canLoadMore, images.length, loadingMore, onIndexChange, onRequestMore]
+  );
+
+  /** Close lightbox then navigate — avoids Link being swallowed by overlay unmount. */
+  const navigateTo = useCallback(
+    (href: string) => {
+      setMetaOpen(false);
+      onClose();
+      router.push(href);
+    },
+    [onClose, router]
   );
 
   const sizeLabel =
@@ -231,13 +242,15 @@ export default function AppLightbox({
                 <div>
                   <dt className="text-xs text-subtle">图集</dt>
                   <dd className="mt-1">
-                    <Link
-                      href={`/gallery/${meta.gallery.id}`}
-                      className="text-accent transition hover:underline"
-                      onClick={onClose}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigateTo(`/gallery/${meta.gallery!.id}`)
+                      }
+                      className="text-left text-accent transition hover:underline"
                     >
                       {meta.gallery.title}
-                    </Link>
+                    </button>
                     {meta.gallery.category && (
                       <p className="mt-1 text-xs text-muted">
                         {meta.gallery.category}
@@ -251,14 +264,16 @@ export default function AppLightbox({
                   <dt className="text-xs text-subtle">标签</dt>
                   <dd className="mt-2 flex flex-wrap gap-1.5">
                     {meta.tags.map((tag) => (
-                      <Link
+                      <button
                         key={tag}
-                        href={`/tag/${encodeURIComponent(tag)}`}
+                        type="button"
+                        onClick={() =>
+                          navigateTo(`/tag/${encodeURIComponent(tag)}`)
+                        }
                         className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted transition hover:border-accent/50 hover:text-accent"
-                        onClick={onClose}
                       >
                         #{tag}
-                      </Link>
+                      </button>
                     ))}
                   </dd>
                 </div>
