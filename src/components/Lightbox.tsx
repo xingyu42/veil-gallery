@@ -117,7 +117,7 @@ export default function Lightbox({
 
   return (
     <div
-      className="keep-white fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm"
+      className="keep-white fixed inset-0 z-[100] bg-black backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={`${title} 图片预览`}
@@ -159,9 +159,9 @@ export default function Lightbox({
         </div>
       </div>
 
-      {/* Image stage — full viewport when meta closed */}
+      {/* Image stage — solid black so light-mode overrides cannot flash beige/white */}
       <div
-        className="relative flex h-full w-full items-center justify-center p-3 pt-16 sm:p-6 sm:pt-16"
+        className="relative flex h-full w-full items-center justify-center bg-black p-3 pt-16 sm:p-6 sm:pt-16"
         onClick={onClose}
         onTouchStart={(event) => {
           touchStartX.current = event.changedTouches[0]?.clientX ?? null;
@@ -185,11 +185,11 @@ export default function Lightbox({
         </button>
 
         <div
-          className="relative flex max-h-full max-w-full items-center justify-center"
+          className="relative flex max-h-full max-w-full items-center justify-center bg-black"
           onClick={(event) => event.stopPropagation()}
         >
           {showSpinner && (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black">
               <div className="h-9 w-9 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
             </div>
           )}
@@ -199,7 +199,7 @@ export default function Lightbox({
             fill={false}
             alt={`${title} #${current.sort_order}`}
             className="max-h-[85vh] max-w-[min(100%,1100px)] select-none object-contain shadow-2xl"
-            placeholderClassName="h-[40vh] w-[30vh] animate-pulse rounded-lg bg-zinc-900 sm:h-[50vh]"
+            placeholderClassName="h-[40vh] w-[30vh] animate-pulse rounded-lg bg-black sm:h-[50vh]"
             draggable={false}
             onLoad={() => setShowSpinner(false)}
             onError={() => setShowSpinner(false)}
