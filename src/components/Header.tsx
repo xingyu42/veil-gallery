@@ -7,21 +7,21 @@ export default function Header() {
   const { toggle } = useTheme();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-black/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-border bg-header backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link
           href="/"
-          className="group flex items-center gap-2 font-serif text-xl tracking-widest text-white"
+          className="group flex items-center gap-2 font-serif text-xl tracking-widest text-foreground"
         >
           <span className="text-accent transition group-hover:text-accent">
             VEIL
           </span>
-          <span className="hidden text-xs font-sans font-light tracking-normal text-white/50 sm:inline">
+          <span className="hidden text-xs font-sans font-light tracking-normal text-muted sm:inline">
             GALLERY
           </span>
         </Link>
 
-        <nav className="flex items-center gap-5 text-sm font-medium text-white/70 sm:gap-6">
+        <nav className="flex items-center gap-5 text-sm font-medium text-muted sm:gap-6">
           <Link href="/" className="transition hover:text-accent">
             首页
           </Link>
@@ -35,7 +35,7 @@ export default function Header() {
           <button
             type="button"
             onClick={toggle}
-            className="ml-1 flex h-8 w-8 items-center justify-center rounded-full border border-white/15 text-white/70 transition hover:border-accent/50 hover:text-accent"
+            className="ml-1 flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted transition hover:border-accent/50 hover:text-accent"
             aria-label="切换主题"
             title="切换主题"
           >

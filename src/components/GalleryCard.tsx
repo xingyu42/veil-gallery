@@ -17,15 +17,15 @@ export default function GalleryCard({ gallery }: { gallery: GalleryListItem }) {
   return (
     <Link
       href={`/gallery/${gallery.id}`}
-      className="group relative block overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition duration-300 hover:ring-accent/50"
+      className="group relative block overflow-hidden rounded-lg bg-card ring-1 ring-border transition duration-300 hover:ring-accent/50"
     >
-      <div className="relative aspect-[3/4] w-full overflow-hidden bg-zinc-900">
+      <div className="relative aspect-[3/4] w-full overflow-hidden bg-placeholder">
         {coverId ? (
           <RemoteImage
             id={coverId}
             alt={title}
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-            placeholderClassName="h-full w-full animate-pulse bg-zinc-900"
+            placeholderClassName="h-full w-full animate-pulse bg-placeholder"
             fallback={<CoverPlaceholder label="图片不可用" />}
           />
         ) : (
