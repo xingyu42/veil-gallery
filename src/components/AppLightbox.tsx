@@ -7,7 +7,6 @@ import Counter from "yet-another-react-lightbox/plugins/counter";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
 import "yet-another-react-lightbox/styles.css";
 import "yet-another-react-lightbox/plugins/counter.css";
-import "yet-another-react-lightbox/plugins/zoom.css";
 
 import { imageUrl } from "@/lib/api";
 import type { GalleryImage, ImageMeta } from "@/lib/types";
