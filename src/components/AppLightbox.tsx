@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Lightbox from "yet-another-react-lightbox";
 import Counter from "yet-another-react-lightbox/plugins/counter";
@@ -23,6 +24,43 @@ interface Props {
   onRequestMore?: () => void | Promise<void>;
 }
 
+/**
+ * YARL portals to document.body and marks every sibling with `inert`.
+ * Meta UI must live inside `.yarl__portal`, otherwise clicks never fire.
+ */
+function useYarlPortalHost(open: boolean): Element | null {
+  const [host, setHost] = useState<Element | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setHost(null);
+      return;
+    }
+
+    let cancelled = false;
+    const pick = () => document.querySelector(".yarl__portal");
+
+    const sync = () => {
+      if (cancelled) return;
+      const el = pick();
+      setHost(el);
+    };
+
+    sync();
+    const raf = requestAnimationFrame(sync);
+    const mo = new MutationObserver(sync);
+    mo.observe(document.body, { childList: true });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      mo.disconnect();
+    };
+  }, [open]);
+
+  return host;
+}
+
 export default function AppLightbox({
   images,
   index,
@@ -41,6 +79,7 @@ export default function AppLightbox({
 
   const open = index !== null;
   const current = index === null ? null : images[index];
+  const portalHost = useYarlPortalHost(open);
 
   const slides = useMemo(
     () =>
@@ -127,6 +166,128 @@ export default function AppLightbox({
         ? `${current.width} × ${current.height}`
         : null;
 
+  const metaPanel =
+    open && portalHost
+      ? createPortal(
+          <>
+            {metaOpen && (
+              <div
+                role="presentation"
+                // absolute: host is already full-viewport fixed (.yarl__portal)
+                className="absolute inset-0 z-[10001] bg-black/50"
+                onClick={() => setMetaOpen(false)}
+              />
+            )}
+
+            <aside
+              className={`theme-dark absolute inset-y-0 right-0 z-[10002] flex w-full max-w-sm flex-col border-l border-border shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
+                metaOpen
+                  ? "translate-x-0"
+                  : "pointer-events-none translate-x-full"
+              }`}
+              aria-hidden={!metaOpen}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-border px-4 py-4">
+                <h2 className="text-xs tracking-[0.2em] text-accent">元数据</h2>
+                <button
+                  type="button"
+                  onClick={() => setMetaOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition hover:bg-card hover:text-foreground"
+                  aria-label="关闭元数据"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-4 py-4">
+                {metaLoading && <p className="text-sm text-subtle">加载中…</p>}
+
+                {!metaLoading && metaError && (
+                  <p className="text-sm text-subtle">暂无元数据</p>
+                )}
+
+                {!metaLoading && !metaError && meta && (
+                  <dl className="space-y-4 text-sm">
+                    {sizeLabel && (
+                      <div>
+                        <dt className="text-xs text-subtle">尺寸</dt>
+                        <dd className="mt-1 text-foreground">{sizeLabel}</dd>
+                      </div>
+                    )}
+                    {meta.orientation && (
+                      <div>
+                        <dt className="text-xs text-subtle">方向</dt>
+                        <dd className="mt-1 capitalize text-foreground">
+                          {meta.orientation}
+                        </dd>
+                      </div>
+                    )}
+                    {meta.gallery && (
+                      <div>
+                        <dt className="text-xs text-subtle">图集</dt>
+                        <dd className="mt-1">
+                          {/*
+                            Keep Link inside YARL portal (via createPortal).
+                            Do NOT call onClose: unmounting aborts Next navigation.
+                          */}
+                          <Link
+                            href={`/gallery/${meta.gallery.id}`}
+                            className="cursor-pointer text-accent underline-offset-2 transition hover:underline"
+                          >
+                            {meta.gallery.title}
+                          </Link>
+                          {meta.gallery.category && (
+                            <p className="mt-1 text-xs text-muted">
+                              {meta.gallery.category}
+                            </p>
+                          )}
+                        </dd>
+                      </div>
+                    )}
+                    {meta.tags && meta.tags.length > 0 && (
+                      <div>
+                        <dt className="text-xs text-subtle">标签</dt>
+                        <dd className="mt-2 flex flex-wrap gap-1.5">
+                          {meta.tags.map((tag) => (
+                            <Link
+                              key={tag}
+                              href={`/tag/${encodeURIComponent(tag)}`}
+                              className="cursor-pointer rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted transition hover:border-accent/50 hover:text-accent hover:underline"
+                            >
+                              #{tag}
+                            </Link>
+                          ))}
+                        </dd>
+                      </div>
+                    )}
+                    {current && (
+                      <div>
+                        <dt className="text-xs text-subtle">图片 ID</dt>
+                        <dd className="mt-1 font-mono text-xs text-muted">
+                          {current.id}
+                        </dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt className="text-xs text-subtle">位置</dt>
+                      <dd className="mt-1 text-foreground">
+                        {(index ?? 0) + 1} / {total}
+                      </dd>
+                    </div>
+                  </dl>
+                )}
+
+                {!metaLoading && !metaError && !meta && (
+                  <p className="text-sm text-subtle">暂无元数据</p>
+                )}
+              </div>
+            </aside>
+          </>,
+          portalHost
+        )
+      : null;
+
   return (
     <>
       <Lightbox
@@ -175,118 +336,7 @@ export default function AppLightbox({
         }}
       />
 
-      {open && metaOpen && (
-        <div
-          role="presentation"
-          className="fixed inset-0 z-[10001] bg-black/50"
-          onClick={() => setMetaOpen(false)}
-        />
-      )}
-
-      <aside
-        className={`theme-dark fixed inset-y-0 right-0 z-[10002] flex w-full max-w-sm flex-col border-l border-border shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
-          open && metaOpen
-            ? "translate-x-0"
-            : "pointer-events-none translate-x-full"
-        }`}
-        aria-hidden={!metaOpen}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-border px-4 py-4">
-          <h2 className="text-xs tracking-[0.2em] text-accent">元数据</h2>
-          <button
-            type="button"
-            onClick={() => setMetaOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition hover:bg-card hover:text-foreground"
-            aria-label="关闭元数据"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          {metaLoading && <p className="text-sm text-subtle">加载中…</p>}
-
-          {!metaLoading && metaError && (
-            <p className="text-sm text-subtle">暂无元数据</p>
-          )}
-
-          {!metaLoading && !metaError && meta && (
-            <dl className="space-y-4 text-sm">
-              {sizeLabel && (
-                <div>
-                  <dt className="text-xs text-subtle">尺寸</dt>
-                  <dd className="mt-1 text-foreground">{sizeLabel}</dd>
-                </div>
-              )}
-              {meta.orientation && (
-                <div>
-                  <dt className="text-xs text-subtle">方向</dt>
-                  <dd className="mt-1 capitalize text-foreground">
-                    {meta.orientation}
-                  </dd>
-                </div>
-              )}
-              {meta.gallery && (
-                <div>
-                  <dt className="text-xs text-subtle">图集</dt>
-                  <dd className="mt-1">
-                    {/*
-                      Do NOT call onClose here: unmounting the lightbox aborts
-                      Next.js client navigation. Route change unmounts naturally.
-                    */}
-                    <Link
-                      href={`/gallery/${meta.gallery.id}`}
-                      className="cursor-pointer text-accent underline-offset-2 transition hover:underline"
-                    >
-                      {meta.gallery.title}
-                    </Link>
-                    {meta.gallery.category && (
-                      <p className="mt-1 text-xs text-muted">
-                        {meta.gallery.category}
-                      </p>
-                    )}
-                  </dd>
-                </div>
-              )}
-              {meta.tags && meta.tags.length > 0 && (
-                <div>
-                  <dt className="text-xs text-subtle">标签</dt>
-                  <dd className="mt-2 flex flex-wrap gap-1.5">
-                    {meta.tags.map((tag) => (
-                      <Link
-                        key={tag}
-                        href={`/tag/${encodeURIComponent(tag)}`}
-                        className="cursor-pointer rounded-full border border-border bg-card px-2.5 py-1 text-xs text-muted transition hover:border-accent/50 hover:text-accent hover:underline"
-                      >
-                        #{tag}
-                      </Link>
-                    ))}
-                  </dd>
-                </div>
-              )}
-              {current && (
-                <div>
-                  <dt className="text-xs text-subtle">图片 ID</dt>
-                  <dd className="mt-1 font-mono text-xs text-muted">
-                    {current.id}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt className="text-xs text-subtle">位置</dt>
-                <dd className="mt-1 text-foreground">
-                  {(index ?? 0) + 1} / {total}
-                </dd>
-              </div>
-            </dl>
-          )}
-
-          {!metaLoading && !metaError && !meta && (
-            <p className="text-sm text-subtle">暂无元数据</p>
-          )}
-        </div>
-      </aside>
+      {metaPanel}
     </>
   );
 }
