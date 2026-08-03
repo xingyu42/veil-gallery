@@ -29,6 +29,7 @@ export default function Lightbox({
   onNext,
 }: Props) {
   const [showSpinner, setShowSpinner] = useState(true);
+  const [metaOpen, setMetaOpen] = useState(false);
   const [meta, setMeta] = useState<ImageMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -40,11 +41,20 @@ export default function Lightbox({
 
   const handleKey = useCallback(
     (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        if (metaOpen) {
+          setMetaOpen(false);
+          return;
+        }
+        onClose();
+      }
       if (event.key === "ArrowLeft" && canPrevious) onPrevious();
       if (event.key === "ArrowRight" && canNext) onNext();
+      if (event.key === "i" || event.key === "I") {
+        setMetaOpen((open) => !open);
+      }
     },
-    [canNext, canPrevious, onClose, onNext, onPrevious]
+    [canNext, canPrevious, metaOpen, onClose, onNext, onPrevious]
   );
 
   useEffect(() => {
@@ -59,12 +69,9 @@ export default function Lightbox({
     };
   }, [current, handleKey]);
 
-  // Fetch image metadata whenever the active image changes
+  // Fetch metadata only when the panel is open (saves upstream quota).
   useEffect(() => {
-    if (!current) {
-      setMeta(null);
-      return;
-    }
+    if (!current || !metaOpen) return;
     let cancelled = false;
     setMeta(null);
     setMetaError(null);
@@ -88,7 +95,7 @@ export default function Lightbox({
     return () => {
       cancelled = true;
     };
-  }, [current]);
+  }, [current, metaOpen]);
 
   if (!current || index === null) return null;
 
@@ -110,32 +117,51 @@ export default function Lightbox({
 
   return (
     <div
-      className="keep-white fixed inset-0 z-[100] flex flex-col bg-black/95 backdrop-blur-sm sm:flex-row"
+      className="keep-white fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={`${title} 图片预览`}
     >
       {/* Top bar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent px-4 py-4 text-white sm:px-6">
-        <div className="min-w-0 pr-12">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent px-4 py-4 text-white sm:px-6">
+        <div className="min-w-0 pr-4">
           <p className="truncate text-sm text-white/80">{title}</p>
           <p className="mt-1 text-xs text-white/45">
             {index + 1} / {total}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgba(255,255,255,0.1)] text-xl text-white transition hover:bg-[rgba(255,255,255,0.2)]"
-          aria-label="关闭预览"
-        >
-          ×
-        </button>
+        <div className="pointer-events-auto flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMetaOpen((open) => !open);
+            }}
+            className={`rounded-full px-3 py-2 text-xs transition ${
+              metaOpen
+                ? "bg-accent/20 text-accent ring-1 ring-accent/50"
+                : "bg-[rgba(255,255,255,0.1)] text-white/80 hover:bg-[rgba(255,255,255,0.2)]"
+            }`}
+            aria-pressed={metaOpen}
+            aria-label={metaOpen ? "收起元数据" : "展开元数据"}
+            title="元数据 (I)"
+          >
+            元数据
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(255,255,255,0.1)] text-xl text-white transition hover:bg-[rgba(255,255,255,0.2)]"
+            aria-label="关闭预览"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
-      {/* Image stage */}
+      {/* Image stage — full viewport when meta closed */}
       <div
-        className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center p-3 pt-16 sm:p-6 sm:pt-16"
+        className="relative flex h-full w-full items-center justify-center p-3 pt-16 sm:p-6 sm:pt-16"
         onClick={onClose}
         onTouchStart={(event) => {
           touchStartX.current = event.changedTouches[0]?.clientX ?? null;
@@ -172,7 +198,7 @@ export default function Lightbox({
             id={current.id}
             fill={false}
             alt={`${title} #${current.sort_order}`}
-            className="max-h-[70vh] max-w-[min(100%,900px)] select-none object-contain shadow-2xl sm:max-h-[85vh]"
+            className="max-h-[85vh] max-w-[min(100%,1100px)] select-none object-contain shadow-2xl"
             placeholderClassName="h-[40vh] w-[30vh] animate-pulse rounded-lg bg-zinc-900 sm:h-[50vh]"
             draggable={false}
             onLoad={() => setShowSpinner(false)}
@@ -187,7 +213,7 @@ export default function Lightbox({
             onNext();
           }}
           disabled={!canNext || loadingMore}
-          className="absolute right-2 z-20 hidden h-12 w-12 items-center justify-center rounded-full bg-black/45 text-3xl text-white transition hover:bg-black/70 disabled:pointer-events-none disabled:opacity-20 lg:right-[calc(18rem+0.5rem)] sm:flex"
+          className="absolute right-2 z-20 hidden h-12 w-12 items-center justify-center rounded-full bg-black/45 text-3xl text-white transition hover:bg-black/70 disabled:pointer-events-none disabled:opacity-20 sm:flex"
           aria-label={loadingMore ? "正在加载下一张" : "下一张"}
         >
           {loadingMore && index === images.length - 1 ? (
@@ -202,85 +228,108 @@ export default function Lightbox({
         </p>
       </div>
 
-      {/* Metadata panel */}
+      {/* Backdrop when meta open */}
+      {metaOpen && (
+        <button
+          type="button"
+          className="absolute inset-0 z-30 bg-black/40"
+          aria-label="关闭元数据"
+          onClick={() => setMetaOpen(false)}
+        />
+      )}
+
+      {/* Metadata slide-over (default collapsed) */}
       <aside
-        className="z-10 max-h-[40vh] w-full shrink-0 overflow-y-auto border-t border-white/10 bg-black/80 px-4 py-4 sm:max-h-none sm:w-72 sm:border-l sm:border-t-0 sm:px-5 sm:py-20 lg:w-80"
+        className={`absolute inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col border-l border-white/10 bg-black/95 shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
+          metaOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
+        }`}
+        aria-hidden={!metaOpen}
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 className="mb-4 text-xs tracking-[0.2em] text-accent">元数据</h2>
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
+          <h2 className="text-xs tracking-[0.2em] text-accent">元数据</h2>
+          <button
+            type="button"
+            onClick={() => setMetaOpen(false)}
+            className="rounded-full px-3 py-1.5 text-xs text-white/60 transition hover:bg-white/10 hover:text-white"
+            aria-label="收起元数据"
+          >
+            收起
+          </button>
+        </div>
 
-        {metaLoading && (
-          <p className="text-sm text-white/40">加载中…</p>
-        )}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {metaLoading && <p className="text-sm text-white/40">加载中…</p>}
 
-        {!metaLoading && metaError && (
-          <p className="text-sm text-white/40">暂无元数据</p>
-        )}
+          {!metaLoading && metaError && (
+            <p className="text-sm text-white/40">暂无元数据</p>
+          )}
 
-        {!metaLoading && !metaError && meta && (
-          <dl className="space-y-4 text-sm">
-            {sizeLabel && (
-              <div>
-                <dt className="text-xs text-white/40">尺寸</dt>
-                <dd className="mt-1 text-white/85">{sizeLabel}</dd>
-              </div>
-            )}
-            {meta.orientation && (
-              <div>
-                <dt className="text-xs text-white/40">方向</dt>
-                <dd className="mt-1 capitalize text-white/85">
-                  {meta.orientation}
-                </dd>
-              </div>
-            )}
-            {meta.gallery && (
-              <div>
-                <dt className="text-xs text-white/40">图集</dt>
-                <dd className="mt-1">
-                  <Link
-                    href={`/gallery/${meta.gallery.id}`}
-                    className="text-accent transition hover:underline"
-                    onClick={onClose}
-                  >
-                    {meta.gallery.title}
-                  </Link>
-                  {meta.gallery.category && (
-                    <p className="mt-1 text-xs text-white/45">
-                      {meta.gallery.category}
-                    </p>
-                  )}
-                </dd>
-              </div>
-            )}
-            {meta.tags && meta.tags.length > 0 && (
-              <div>
-                <dt className="text-xs text-white/40">标签</dt>
-                <dd className="mt-2 flex flex-wrap gap-1.5">
-                  {meta.tags.map((tag) => (
+          {!metaLoading && !metaError && meta && (
+            <dl className="space-y-4 text-sm">
+              {sizeLabel && (
+                <div>
+                  <dt className="text-xs text-white/40">尺寸</dt>
+                  <dd className="mt-1 text-white/85">{sizeLabel}</dd>
+                </div>
+              )}
+              {meta.orientation && (
+                <div>
+                  <dt className="text-xs text-white/40">方向</dt>
+                  <dd className="mt-1 capitalize text-white/85">
+                    {meta.orientation}
+                  </dd>
+                </div>
+              )}
+              {meta.gallery && (
+                <div>
+                  <dt className="text-xs text-white/40">图集</dt>
+                  <dd className="mt-1">
                     <Link
-                      key={tag}
-                      href={`/tag/${encodeURIComponent(tag)}`}
-                      className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-xs text-white/70 transition hover:border-accent/50 hover:text-accent"
+                      href={`/gallery/${meta.gallery.id}`}
+                      className="text-accent transition hover:underline"
                       onClick={onClose}
                     >
-                      #{tag}
+                      {meta.gallery.title}
                     </Link>
-                  ))}
+                    {meta.gallery.category && (
+                      <p className="mt-1 text-xs text-white/45">
+                        {meta.gallery.category}
+                      </p>
+                    )}
+                  </dd>
+                </div>
+              )}
+              {meta.tags && meta.tags.length > 0 && (
+                <div>
+                  <dt className="text-xs text-white/40">标签</dt>
+                  <dd className="mt-2 flex flex-wrap gap-1.5">
+                    {meta.tags.map((tag) => (
+                      <Link
+                        key={tag}
+                        href={`/tag/${encodeURIComponent(tag)}`}
+                        className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-xs text-white/70 transition hover:border-accent/50 hover:text-accent"
+                        onClick={onClose}
+                      >
+                        #{tag}
+                      </Link>
+                    ))}
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt className="text-xs text-white/40">图片 ID</dt>
+                <dd className="mt-1 font-mono text-xs text-white/50">
+                  {current.id}
                 </dd>
               </div>
-            )}
-            <div>
-              <dt className="text-xs text-white/40">图片 ID</dt>
-              <dd className="mt-1 font-mono text-xs text-white/50">
-                {current.id}
-              </dd>
-            </div>
-          </dl>
-        )}
+            </dl>
+          )}
 
-        {!metaLoading && !metaError && !meta && (
-          <p className="text-sm text-white/40">暂无元数据</p>
-        )}
+          {!metaLoading && !metaError && !meta && (
+            <p className="text-sm text-white/40">暂无元数据</p>
+          )}
+        </div>
       </aside>
     </div>
   );
