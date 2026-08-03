@@ -29,10 +29,9 @@ interface Props {
 
 export default async function HomePage({ searchParams }: Props) {
   const params = await searchParams;
-  const legacyCategory = params.category?.trim();
-
-  if (legacyCategory) {
-    redirect(`/galleries?category=${encodeURIComponent(legacyCategory)}`);
+  // Legacy category links no longer filter; send to plain galleries list.
+  if (params.category?.trim()) {
+    redirect("/galleries");
   }
 
   let config = null;
@@ -41,8 +40,6 @@ export default async function HomePage({ searchParams }: Props) {
   let error: string | null = null;
 
   try {
-    // Sample from the calibrated dense list window (Next Data Cache, revalidate 300)
-    // instead of N parallel /v1/gallery/random upstream calls (~2s each).
     const startOffset = await getStartOffset();
     const [cfg, tags, pool] = await Promise.all([
       getSiteConfig(),
@@ -56,7 +53,6 @@ export default async function HomePage({ searchParams }: Props) {
     error = getErrorMessage(e, "加载失败");
   }
 
-  const featuredCategories = config?.featured_categories || [];
   const scale = config?.scale;
 
   return (
@@ -70,7 +66,7 @@ export default async function HomePage({ searchParams }: Props) {
           <span className="text-accent">Veil</span> Gallery
         </h1>
         <p className="relative mx-auto mt-4 max-w-2xl text-base leading-7 text-white/50">
-          现代时尚写真 · 精选分类与标签
+          现代时尚写真 · 精选标签发现
         </p>
         {scale && (
           <p className="relative mt-4 text-xs text-white/30">
@@ -103,9 +99,9 @@ export default async function HomePage({ searchParams }: Props) {
         </div>
       )}
 
-      {(featuredCategories.length > 0 || featuredTags.length > 0) && (
+      {featuredTags.length > 0 && (
         <div className="mb-10">
-          <FeaturedBar categories={featuredCategories} featuredTags={featuredTags} />
+          <FeaturedBar featuredTags={featuredTags} />
         </div>
       )}
 
