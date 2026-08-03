@@ -122,8 +122,8 @@ export default function Lightbox({
       aria-modal="true"
       aria-label={`${title} 图片预览`}
     >
-      {/* Top bar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent px-4 py-4 text-white sm:px-6">
+      {/* Top bar — above dimmer so controls stay usable */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-50 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent px-4 py-4 text-white sm:px-6">
         <div className="min-w-0 pr-4">
           <p className="truncate text-sm text-white/80">{title}</p>
           <p className="mt-1 text-xs text-white/45">
@@ -228,20 +228,19 @@ export default function Lightbox({
         </p>
       </div>
 
-      {/* Backdrop when meta open */}
+      {/* Dimmer: must be a div — native button defaults to a light face and caused the white-out */}
       {metaOpen && (
-        <button
-          type="button"
-          className="absolute inset-0 z-30 bg-black/40"
-          aria-label="关闭元数据"
+        <div
+          role="presentation"
+          className="absolute inset-0 z-30 bg-black/50"
           onClick={() => setMetaOpen(false)}
         />
       )}
 
       {/* Metadata slide-over (default collapsed) */}
       <aside
-        className={`absolute inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col border-l border-white/10 bg-black/95 shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
-          metaOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
+        className={`absolute inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col border-l border-white/10 bg-zinc-950 shadow-2xl transition-transform duration-200 ease-out sm:max-w-xs ${
+          metaOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
         }`}
         aria-hidden={!metaOpen}
         onClick={(event) => event.stopPropagation()}
