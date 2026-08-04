@@ -28,7 +28,7 @@ npm run dev
 ## 环境变量
 
 ```bash
-# Upstash Redis（图片限流 + 图集 startOffset 共享）
+# Upstash Redis（图片限流 + 图集尾长边界共享）
 # Vercel Marketplace「Upstash」集成会自动注入，一般无需手填：
 UPSTASH_REDIS_REST_URL=https://....upstash.io
 UPSTASH_REDIS_REST_TOKEN=...
@@ -37,15 +37,14 @@ UPSTASH_REDIS_REST_TOKEN=...
 # KV_REST_API_URL=...
 # KV_REST_API_TOKEN=...
 
-# 可选：手动校准密钥（仅当设置了 CRON_SECRET 时，/api/calibrate-offset 才要 ?key=）
-# CRON_SECRET=your-secret
+# 手工恢复端点随机密钥（/api/calibrate-offset?key=...；未配置时端点拒绝访问）
+# CRON_SECRET=replace-with-a-long-random-secret
 
-# 推荐：首次成功调用 /api/calibrate-offset 后，把返回的 startOffset 配到生产。
-# 作为 Redis 未命中时的冷启动兜底，避免回退到 0（上游头部大量空图集）。
-# 0 仅是最后兜底；稀疏跳过 + 前端连续空页停止是缓解，不是 happy path。
-# GALLERY_START_OFFSET=<calibrated-startOffset>
+# 可选：Redis 不可用且自动初始化失败时使用的未验证起点。
+# 正常运行会把 total 与稠密尾长写入 Redis，并由 startOffset = total - denseCount 推导。
+# GALLERY_START_OFFSET=<fallback-startOffset>
 
-# 如未配置 Redis：限流失效保护（放行）；startOffset 仅进程内存，跨实例不共享
+# 如未配置 Redis：限流失效保护（放行）；边界仅进程内存，跨实例不共享
 ```
 
 获取方式：
@@ -69,6 +68,7 @@ cp .env.example .env.local
 | 图片灯箱 | [yet-another-react-lightbox](https://github.com/igordanchenko/yet-another-react-lightbox)（`AppLightbox`）+ 自定义元数据侧栏，元数据走 `/api/image/[id]/meta` |
 | 限流保护 | 共享桶 100/5min/区域 + tag-preview 专属 60/5min/区域；图片 CDN 永久缓存；JSON `revalidate` / Route 缓存 |
 | 图集热度 | 详情页 beacon → Redis ZSET `gallery:pv`（无图片预热）；导航「热门」→ `/popular` RSC Top-N |
+| 图集边界 | 首次/容灾窗口二分；正常运行用稠密尾长游标 + 100 条局部窗口校正 |
 | 图集列表 / 随机预览 | CSS Grid（1–4 列） |
 | 图集详情瀑布流 | 最短列算法（`ShortestColumnMasonry`），保持 1→2→3→4 阅读顺序 |
 
@@ -106,7 +106,7 @@ src/
 - 上游限流约 100 次 / 5 分钟（IP 级）。服务端缓存请勿随意缩短。
 - **共享上游配额**（图片 MISS + 通用 JSON）：
   - Upstash：100 次 / 5 分钟 / Vercel 区域（`rl:upstream`）
-  - 扣费点：`apiFetch`、随机图集、startOffset 探针、图片代理 MISS
+  - 扣费点：`apiFetch`、随机图集、图集边界初始化/校正、图片代理 MISS
   - 策略：回源前扣费（保守）；Next data-cache 命中时也可能已扣 1 次
   - 图片 CDN HIT / Route 级 CDN HIT：不进函数，不扣费
   - 超限：HTTP 429 + `Retry-After` / `X-RateLimit-*`

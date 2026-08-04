@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 export const UPSTREAM_RATE_LIMIT = "RATE_LIMIT";
 export const UPSTREAM_FORBIDDEN = "UPSTREAM_FORBIDDEN";
+export const GALLERY_BOUNDARY_UNAVAILABLE = "GALLERY_BOUNDARY_UNAVAILABLE";
 
 /** Shared copy for tag-preview 429 UI (server page + client reshuffle). */
 export const TAG_PREVIEW_RATE_LIMIT_MESSAGE =
@@ -59,6 +60,7 @@ export function rateLimitResponseHeaders(
 export function getUpstreamHttpStatus(message: string, fallback: number): number {
   if (message === UPSTREAM_RATE_LIMIT) return 429;
   if (message === UPSTREAM_FORBIDDEN) return 403;
+  if (message === GALLERY_BOUNDARY_UNAVAILABLE) return 503;
   return fallback;
 }
 
@@ -69,6 +71,9 @@ export function describeUpstreamError(
 ): string {
   if (message === UPSTREAM_RATE_LIMIT) return rateLimitMessage;
   if (message === UPSTREAM_FORBIDDEN) return forbiddenMessage;
+  if (message === GALLERY_BOUNDARY_UNAVAILABLE) {
+    return "图集索引暂时不可用，请稍后重试";
+  }
   return message;
 }
 

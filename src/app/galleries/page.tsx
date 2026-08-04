@@ -1,10 +1,11 @@
 import { getGalleries } from "@/lib/api";
-import { getStartOffset } from "@/lib/start-offset";
+import { resolveGalleryBoundaryOffset } from "@/lib/start-offset";
 import InfiniteGalleries from "@/components/InfiniteGalleries";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 180;
 
 interface Props {
   searchParams: Promise<{ category?: string }>;
@@ -17,13 +18,11 @@ export default async function GalleriesPage({ searchParams }: Props) {
     redirect("/galleries");
   }
 
-  const startOffset = await getStartOffset();
-
   let data = null;
   let error: string | null = null;
 
   try {
-    data = await getGalleries(12, startOffset);
+    data = await getGalleries(12, await resolveGalleryBoundaryOffset());
   } catch (e) {
     error = getErrorMessage(e, "加载失败");
   }

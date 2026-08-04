@@ -83,7 +83,7 @@ export async function getAllTags(): Promise<Paginated<TagItem>> {
   return apiFetch("/v1/tags?limit=20000&offset=0", 0);
 }
 
-/** Shared with start-offset probe so density matches list filtering. */
+/** Shared with dense-tail boundary search so both paths use one definition. */
 export function isDisplayableGallery(gallery: GalleryListItem): boolean {
   return (
     (gallery.uploaded_images ?? 0) > 0 && Boolean(gallery.cover?.image_id)
@@ -92,9 +92,8 @@ export function isDisplayableGallery(gallery: GalleryListItem): boolean {
 
 /**
  * Fetch galleries with uploaded covers.
- * Upstream pages can be sparse after filter, so scan multiple batches until
- * `limit` is filled, the list is exhausted, or maxScans is hit.
- * Empty (non-displayable) streaks jump geometrically to escape sparse heads.
+ * Upstream offsets address raw galleries, so every examined item advances the
+ * cursor even when it is filtered out. Scan sequentially to avoid skipped rows.
  */
 export async function getGalleries(
   limit = 24,
@@ -111,7 +110,6 @@ export async function getGalleries(
   let total = 0;
   let scans = 0;
   let exhausted = false;
-  let emptyStreak = 0;
   let lastData: Paginated<GalleryListItem> | null = null;
 
   while (collected.length < limit && scans < maxScans && !exhausted) {
@@ -130,14 +128,20 @@ export async function getGalleries(
     total = data.total;
     scans += 1;
 
+    if (data.offset !== cursor) {
+      throw new Error("UPSTREAM_GALLERY_OFFSET_MISMATCH");
+    }
+
     const raw = data.items || [];
     if (raw.length === 0) {
       exhausted = true;
       break;
     }
 
-    const beforeCount = collected.length;
+    const pageStart = cursor;
+    let consumed = 0;
     for (const gallery of raw) {
+      consumed += 1;
       if (seen.has(gallery.id)) continue;
       seen.add(gallery.id);
       if (!isDisplayableGallery(gallery)) continue;
@@ -145,17 +149,9 @@ export async function getGalleries(
       if (collected.length >= limit) break;
     }
 
-    const added = collected.length - beforeCount;
-    if (added === 0) {
-      emptyStreak += 1;
-      const jumpMul = Math.min(2 ** (emptyStreak - 1), 16);
-      cursor += batchSize * jumpMul;
-    } else {
-      emptyStreak = 0;
-      cursor += batchSize;
-    }
+    cursor = pageStart + consumed;
 
-    if (raw.length < batchSize || cursor >= total) {
+    if (consumed === raw.length && cursor >= total) {
       exhausted = true;
     }
   }

@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSiteConfig, getFeaturedTags, getGalleries } from "@/lib/api";
-import { getStartOffset } from "@/lib/start-offset";
+import { resolveGalleryBoundaryOffset } from "@/lib/start-offset";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import type { GalleryListItem } from "@/lib/types";
 import FeaturedBar from "@/components/FeaturedBar";
 import GalleryCard from "@/components/GalleryCard";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 180;
 
 /** Pool size for homepage preview; drawn from cached getGalleries window. */
 const HOME_POOL_SIZE = 48;
@@ -39,12 +40,12 @@ export default async function HomePage({ searchParams }: Props) {
   let error: string | null = null;
 
   try {
-    const startOffset = await getStartOffset();
-    const [cfg, tags, pool] = await Promise.all([
+    const [cfg, tags, boundaryOffset] = await Promise.all([
       getSiteConfig(),
       getFeaturedTags(),
-      getGalleries(HOME_POOL_SIZE, startOffset),
+      resolveGalleryBoundaryOffset(),
     ]);
+    const pool = await getGalleries(HOME_POOL_SIZE, boundaryOffset);
     config = cfg;
     featuredTags = tags.items || [];
     galleries = pickRandom(pool.items || [], HOME_PREVIEW_COUNT);
