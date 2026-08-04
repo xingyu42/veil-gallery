@@ -3,7 +3,6 @@ import { getGalleries } from "@/lib/api";
 import { getStartOffset } from "@/lib/start-offset";
 import { upstreamJsonError } from "@/lib/upstream-error";
 
-// getStartOffset / Upstash rate-limit use no-store Redis REST; not ISR-compatible.
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {

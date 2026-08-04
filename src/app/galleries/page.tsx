@@ -4,7 +4,6 @@ import InfiniteGalleries from "@/components/InfiniteGalleries";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import { redirect } from "next/navigation";
 
-// getStartOffset / Upstash rate-limit use no-store Redis REST; not ISR-compatible.
 export const dynamic = "force-dynamic";
 
 interface Props {
