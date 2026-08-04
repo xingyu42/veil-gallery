@@ -3,6 +3,56 @@ import type { GalleryListItem } from "./types";
 
 const PV_ZSET = "gallery:pv";
 
+/** Popular boards: all-time cumulative + calendar windows. */
+export type PopularWindow = "day" | "week" | "month" | "all";
+
+/** Valid window values — single source of truth for route/page validation. */
+export const POPULAR_WINDOWS: readonly PopularWindow[] = [
+  "day",
+  "week",
+  "month",
+  "all",
+];
+
+/** GC horizon for window keys; only the current window is ever read. */
+const WINDOW_TTL_S: Record<Exclude<PopularWindow, "all">, number> = {
+  day: 2 * 86_400,
+  week: 14 * 86_400,
+  month: 62 * 86_400,
+};
+
+/** Rankings deeper than this are not served (bounds per-page Redis fan-out). */
+const MAX_BOARD_DEPTH = 500;
+
+/** UTC+8 wall clock — day/week/month boundaries follow the CN audience. */
+const TZ_SHIFT_MS = 8 * 3_600_000;
+
+/** ISO-8601 week label, e.g. "2026-W32". Input must already be TZ-shifted. */
+function isoWeekKey(d: Date): string {
+  const date = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  );
+  const dow = (date.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
+  date.setUTCDate(date.getUTCDate() - dow + 3); // Thursday of this week
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const fdow = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - fdow + 3);
+  const week =
+    1 + Math.round((date.getTime() - firstThursday.getTime()) / 604_800_000);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function windowKey(window: PopularWindow, now = new Date()): string {
+  if (window === "all") return PV_ZSET;
+  const d = new Date(now.getTime() + TZ_SHIFT_MS);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  if (window === "day") return `gallery:pv:day:${y}-${m}-${day}`;
+  if (window === "month") return `gallery:pv:month:${y}-${m}`;
+  return `gallery:pv:week:${isoWeekKey(d)}`;
+}
+
 export interface GalleryViewInput {
   id: number;
   title: string;
@@ -16,7 +66,8 @@ function infoKey(id: number | string): string {
 }
 
 /**
- * Record one gallery detail view into Redis (ZSET score + card snapshot HASH).
+ * Record one gallery detail view into Redis: all-time ZSET + day/week/month
+ * window ZSETs (TTL'd), plus the card snapshot HASH.
  * Fail-open: missing Redis or errors are logged and swallowed.
  */
 export async function recordGalleryView(input: GalleryViewInput): Promise<void> {
@@ -43,8 +94,14 @@ export async function recordGalleryView(input: GalleryViewInput): Promise<void> 
   }
 
   try {
+    const now = new Date();
     const p = redis.pipeline();
     p.zincrby(PV_ZSET, 1, member);
+    for (const w of ["day", "week", "month"] as const) {
+      const key = windowKey(w, now);
+      p.zincrby(key, 1, member);
+      p.expire(key, WINDOW_TTL_S[w]);
+    }
     p.hset(infoKey(id), fields);
     await p.exec();
   } catch (error) {
@@ -88,30 +145,53 @@ function mapInfoToListItem(id: number, hash: InfoHash | null): GalleryListItem |
   };
 }
 
-/**
- * Top galleries by PV. Pure Redis — no upstream fetch.
- * Fail-open → [].
- */
-export async function getPopularGalleries(limit = 8): Promise<GalleryListItem[]> {
-  const redis = getRedis();
-  if (!redis) return [];
+export interface PopularPage {
+  items: GalleryListItem[];
+  /** Board size actually served (ZSET cardinality capped at MAX_BOARD_DEPTH). */
+  total: number;
+  /** Raw consumed cursor — advances past skipped incomplete snapshots. */
+  next_offset: number;
+  has_next: boolean;
+}
 
-  const n = Math.min(24, Math.max(1, Math.floor(limit) || 8));
+/**
+ * Top galleries by PV within a time window. Pure Redis — no upstream fetch.
+ * Fail-open → empty page.
+ */
+export async function getPopularGalleries(opts?: {
+  window?: PopularWindow;
+  limit?: number;
+  offset?: number;
+}): Promise<PopularPage> {
+  const redis = getRedis();
+  const offset = Math.max(0, Math.floor(opts?.offset ?? 0) || 0);
+  const n = Math.min(24, Math.max(1, Math.floor(opts?.limit ?? 12) || 12));
+  const emptyPage = (total = 0): PopularPage => ({
+    items: [],
+    total,
+    next_offset: offset,
+    has_next: false,
+  });
+  if (!redis) return emptyPage();
 
   try {
-    // Highest scores first; fetch a few extra so we can skip incomplete hashes.
-    const fetchN = Math.min(48, n + 8);
-    const members = await redis.zrange<string[]>(PV_ZSET, 0, fetchN - 1, {
-      rev: true,
-    });
+    const key = windowKey(opts?.window ?? "all");
+    // Same round trip: board size + the slice we might need (covers n+8 slack).
+    const board = redis.pipeline();
+    board.zcard(key);
+    board.zrange<string[]>(key, offset, offset + n + 8 - 1, { rev: true });
+    const [card, ranked] = await board.exec<[number, string[]]>();
+    const total = Math.min(typeof card === "number" ? card : 0, MAX_BOARD_DEPTH);
+    if (offset >= total) return emptyPage(total);
 
-    if (!members?.length) return [];
+    const members = (ranked ?? []).slice(0, total - offset);
+    if (!members.length) return emptyPage(total);
 
     const ids = members
       .map((m) => parseInt(String(m), 10))
       .filter((id) => Number.isFinite(id) && id > 0);
 
-    if (!ids.length) return [];
+    if (!ids.length) return emptyPage(total);
 
     const p = redis.pipeline();
     for (const id of ids) {
@@ -124,9 +204,16 @@ export async function getPopularGalleries(limit = 8): Promise<GalleryListItem[]>
       const item = mapInfoToListItem(ids[i], hashes[i] ?? null);
       if (item) items.push(item);
     }
-    return items;
+
+    const nextOffset = offset + members.length;
+    return {
+      items,
+      total,
+      next_offset: nextOffset,
+      has_next: nextOffset < total,
+    };
   } catch (error) {
     console.error("[gallery-views] getPopular failed:", error);
-    return [];
+    return emptyPage();
   }
 }

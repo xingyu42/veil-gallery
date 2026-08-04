@@ -1,6 +1,11 @@
+import Link from "next/link";
 import type { Metadata } from "next";
-import { getPopularGalleries } from "@/lib/gallery-views";
-import GalleryCard from "@/components/GalleryCard";
+import {
+  getPopularGalleries,
+  POPULAR_WINDOWS,
+  type PopularWindow,
+} from "@/lib/gallery-views";
+import InfinitePopular from "@/components/InfinitePopular";
 
 export const dynamic = "force-dynamic";
 
@@ -8,10 +13,39 @@ export const metadata: Metadata = {
   title: "热门图集",
 };
 
-const POPULAR_LIMIT = 12;
+const PAGE_SIZE = 12;
 
-export default async function PopularPage() {
-  const items = await getPopularGalleries(POPULAR_LIMIT);
+const TABS: { key: PopularWindow; label: string }[] = [
+  { key: "day", label: "今日" },
+  { key: "week", label: "本周" },
+  { key: "month", label: "本月" },
+  { key: "all", label: "总榜" },
+];
+
+const EMPTY_HINT: Record<PopularWindow, string> = {
+  day: "今日还没有浏览数据，逛逛图集点亮榜单",
+  week: "本周还没有浏览数据",
+  month: "本月还没有浏览数据",
+  all: "暂无热门数据，浏览图集详情后会陆续出现",
+};
+
+interface Props {
+  searchParams: Promise<{ window?: string }>;
+}
+
+export default async function PopularPage({ searchParams }: Props) {
+  const raw = (await searchParams).window ?? "all";
+  const window: PopularWindow = POPULAR_WINDOWS.includes(
+    raw as PopularWindow
+  )
+    ? (raw as PopularWindow)
+    : "all";
+
+  const initial = await getPopularGalleries({
+    window,
+    limit: PAGE_SIZE,
+    offset: 0,
+  });
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
@@ -22,16 +56,34 @@ export default async function PopularPage() {
         </h1>
       </div>
 
-      {items.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {items.map((gallery) => (
-            <GalleryCard key={gallery.id} gallery={gallery} />
-          ))}
-        </div>
+      <div className="mb-8 flex flex-wrap gap-2">
+        {TABS.map((tab) => {
+          const active = tab.key === window;
+          return (
+            <Link
+              key={tab.key}
+              href={tab.key === "all" ? "/popular" : `/popular?window=${tab.key}`}
+              className={
+                active
+                  ? "rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-accent-foreground"
+                  : "rounded-full border border-border px-4 py-1.5 text-sm text-muted transition hover:border-accent/50 hover:text-accent"
+              }
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+      </div>
+
+      {initial.items.length > 0 ? (
+        <InfinitePopular
+          key={window}
+          initial={initial}
+          window={window}
+          pageSize={PAGE_SIZE}
+        />
       ) : (
-        <p className="py-20 text-center text-subtle">
-          暂无热门数据，浏览图集详情后会陆续出现
-        </p>
+        <p className="py-20 text-center text-subtle">{EMPTY_HINT[window]}</p>
       )}
     </div>
   );
