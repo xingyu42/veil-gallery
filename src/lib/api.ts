@@ -15,11 +15,7 @@ import {
   consumeUpstreamRateLimit,
 } from "./rate-limit";
 import { USER_AGENT, upstreamUrl } from "./upstream";
-import {
-  getUpstreamError,
-  isUpstreamRateLimitError,
-  UPSTREAM_FORBIDDEN,
-} from "./upstream-error";
+import { getUpstreamError } from "./upstream-error";
 
 /**
  * JSON upstream fetch. Consumes one shared per-region quota unit before fetch
@@ -30,7 +26,7 @@ import {
  * hop; we intentionally charge first (conservative). Prefer route/CDN cache so
  * handlers are not re-entered on hot paths.
  */
-async function apiFetch<T>(
+export async function apiFetch<T>(
   path: string,
   revalidateSeconds = 900,
   opts?: { timeoutMs?: number }
@@ -170,106 +166,6 @@ export async function getGalleries(
     has_next: hasNext,
     next_offset: nextOffset,
   };
-}
-
-/** Upstream /v1/gallery/random payload (single gallery, not list-shaped). */
-type UpstreamRandomGallery = {
-  id: number;
-  title?: string | null;
-  category?: string | null;
-  image_count?: number;
-  images?: Array<{
-    id: number;
-    sort_order?: number;
-    width?: number | null;
-    height?: number | null;
-    orientation?: string | null;
-  }>;
-};
-
-function randomGalleryToListItem(
-  gallery: UpstreamRandomGallery
-): GalleryListItem | null {
-  const images = Array.isArray(gallery.images) ? gallery.images : [];
-  const first = [...images].sort(
-    (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
-  )[0];
-  if (!first?.id) return null;
-
-  return {
-    id: gallery.id,
-    title: gallery.title?.trim() || `Gallery #${gallery.id}`,
-    series_number: null,
-    category: gallery.category ?? null,
-    image_count: gallery.image_count ?? images.length,
-    uploaded_images: images.length,
-    status: "done",
-    updated_at: new Date().toISOString(),
-    cover: {
-      image_id: first.id,
-      width: first.width ?? null,
-      height: first.height ?? null,
-      orientation: first.orientation ?? null,
-    },
-  };
-}
-
-async function fetchOneRandomGallery(): Promise<GalleryListItem | null> {
-  try {
-    // One quota unit per parallel random call (same bucket as apiFetch / images).
-    await consumeUpstreamRateLimit();
-
-    const res = await fetch(upstreamUrl("/v1/gallery/random"), {
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "User-Agent": USER_AGENT,
-      },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!res.ok) {
-      const upstreamError = getUpstreamError(res.status);
-      if (upstreamError) throw upstreamError;
-      return null;
-    }
-    const data = (await res.json()) as UpstreamRandomGallery;
-    return randomGalleryToListItem(data);
-  } catch (error) {
-    // Surface rate-limit / forbidden to callers; soft-fail other errors in batch.
-    if (
-      isUpstreamRateLimitError(error) ||
-      (error instanceof Error && error.message === UPSTREAM_FORBIDDEN)
-    ) {
-      throw error;
-    }
-    return null;
-  }
-}
-
-/**
- * Fetch `count` unique random galleries via /v1/gallery/random.
- * Upstream returns one gallery per request; we parallel-fetch and dedupe.
- */
-export async function getRandomGalleries(
-  count = 8
-): Promise<GalleryListItem[]> {
-  const want = Math.min(24, Math.max(1, count));
-  const collected = new Map<number, GalleryListItem>();
-  const maxRounds = 3;
-
-  for (let round = 0; round < maxRounds && collected.size < want; round++) {
-    const need = want - collected.size;
-    const batch = await Promise.all(
-      Array.from({ length: need }, () => fetchOneRandomGallery())
-    );
-    for (const item of batch) {
-      if (item && !collected.has(item.id)) {
-        collected.set(item.id, item);
-      }
-    }
-  }
-
-  return Array.from(collected.values()).slice(0, want);
 }
 
 function isGalleryImage(value: unknown): value is GalleryImage {

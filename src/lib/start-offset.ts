@@ -15,8 +15,7 @@ import { USER_AGENT, upstreamUrl } from "./upstream";
 import {
   GALLERY_BOUNDARY_UNAVAILABLE,
   getUpstreamError,
-  isUpstreamRateLimitError,
-  UPSTREAM_FORBIDDEN,
+  isHardUpstreamFailure,
 } from "./upstream-error";
 
 const RECORD_KEY = "gallery:dense-tail:v2:all";
@@ -373,12 +372,7 @@ async function runRefreshSingleFlight(
   try {
     return await runtimeState.refreshPromise;
   } catch (error) {
-    if (
-      isUpstreamRateLimitError(error) ||
-      (error instanceof Error && error.message === UPSTREAM_FORBIDDEN)
-    ) {
-      throw error;
-    }
+    if (isHardUpstreamFailure(error)) throw error;
     console.error("[dense-tail] Refresh failed:", error);
     return { record: null, busy: false };
   } finally {

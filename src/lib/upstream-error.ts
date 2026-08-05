@@ -38,6 +38,14 @@ export function isUpstreamRateLimitError(
   );
 }
 
+/** Rate-limit or forbidden — abort the whole batch / rebuild, do not soft-fail. */
+export function isHardUpstreamFailure(error: unknown): boolean {
+  return (
+    isUpstreamRateLimitError(error) ||
+    (error instanceof Error && error.message === UPSTREAM_FORBIDDEN)
+  );
+}
+
 export function getRateLimitResetMs(error: unknown): number {
   if (error instanceof UpstreamRateLimitError) return error.resetMs;
   return 0;

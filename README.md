@@ -44,6 +44,10 @@ UPSTASH_REDIS_REST_TOKEN=...
 # 正常运行会把 total 与稠密尾长写入 Redis，并由 startOffset = total - denseCount 推导。
 # GALLERY_START_OFFSET=<fallback-startOffset>
 
+# 可选：首页随机池（稠密尾内随机 offset 一次 list 拉窗，Redis 共享，TTL 到期懒重建）
+# HOME_RANDOM_POOL_SIZE=96           # 单次 list 窗口大小（池内条数）
+# HOME_RANDOM_POOL_TTL_SECONDS=1800  # 池新鲜期；默认配额成本 = 1 发/30min/区域
+
 # 如未配置 Redis：限流失效保护（放行）；边界仅进程内存，跨实例不共享
 ```
 
@@ -87,7 +91,6 @@ src/
     api/galleries/route.ts      # 客户端分页代理
   components/
     InfiniteGalleries.tsx       # 无限滚动客户端组件（Grid）
-    RandomGalleries.tsx         # 随机图集（Grid）
     GalleryImages.tsx           # 图集图片瀑布流 + 灯箱
     ShortestColumnMasonry.tsx   # 最短列瀑布流
     RemoteImage.tsx             # 源站图片统一入口（骨架占位）

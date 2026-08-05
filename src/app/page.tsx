@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSiteConfig, getFeaturedTags, getGalleries } from "@/lib/api";
-import { resolveGalleryBoundaryOffset } from "@/lib/start-offset";
+import { getSiteConfig, getFeaturedTags } from "@/lib/api";
+import { getHomePoolItems } from "@/lib/home-pool";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 import type { GalleryListItem } from "@/lib/types";
 import FeaturedBar from "@/components/FeaturedBar";
@@ -10,17 +10,18 @@ import GalleryCard from "@/components/GalleryCard";
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
 
-/** Pool size for homepage preview; drawn from cached getGalleries window. */
-const HOME_POOL_SIZE = 48;
 const HOME_PREVIEW_COUNT = 8;
 
 function pickRandom<T>(items: T[], n: number): T[] {
+  const want = Math.min(n, items.length);
+  if (want <= 0) return [];
+  // Partial Fisher-Yates: only shuffle the first `want` slots.
   const a = items.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+  for (let i = 0; i < want; i++) {
+    const j = i + Math.floor(Math.random() * (a.length - i));
     [a[i], a[j]] = [a[j], a[i]];
   }
-  return a.slice(0, Math.min(n, a.length));
+  return a.slice(0, want);
 }
 
 interface Props {
@@ -40,15 +41,14 @@ export default async function HomePage({ searchParams }: Props) {
   let error: string | null = null;
 
   try {
-    const [cfg, tags, boundaryOffset] = await Promise.all([
+    const [cfg, tags, poolItems] = await Promise.all([
       getSiteConfig(),
       getFeaturedTags(),
-      resolveGalleryBoundaryOffset(),
+      getHomePoolItems(),
     ]);
-    const pool = await getGalleries(HOME_POOL_SIZE, boundaryOffset);
     config = cfg;
     featuredTags = tags.items || [];
-    galleries = pickRandom(pool.items || [], HOME_PREVIEW_COUNT);
+    galleries = pickRandom(poolItems, HOME_PREVIEW_COUNT);
   } catch (e) {
     error = getErrorMessage(e, "加载失败");
   }
