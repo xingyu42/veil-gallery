@@ -200,12 +200,14 @@ export async function getPopularGalleries(opts?: {
     const hashes = await p.exec<Array<InfoHash | null>>();
 
     const items: GalleryListItem[] = [];
+    let scanned = 0;
     for (let i = 0; i < ids.length && items.length < n; i++) {
+      scanned = i + 1;
       const item = mapInfoToListItem(ids[i], hashes[i] ?? null);
       if (item) items.push(item);
     }
 
-    const nextOffset = offset + members.length;
+    const nextOffset = offset + scanned;
     return {
       items,
       total,
