@@ -21,26 +21,37 @@ function cacheHeaders(browser: string, cdn: string): Record<string, string> {
   };
 }
 
-/** Successful image: immutable forever (id never changes content). */
+/** Successful image: immutable forever (id never changes content). Canonical only. */
 const HIT_CACHE = cacheHeaders(
   "public, max-age=31536000, immutable",
   "public, s-maxage=31536000, immutable"
 );
 
-/** Missing cover / not uploaded yet — short negative cache, avoid stampede. */
+/**
+ * Steady miss (object not uploaded yet). Longer CDN negative cache avoids
+ * stampede; browser no-store so manual Same-URL Retry is not glued to a local
+ * error document (CDN may still serve 404 within TTL — accepted).
+ */
 const MISS_404_CACHE = cacheHeaders(
-  "public, max-age=0",
+  "no-store",
   "public, s-maxage=60, stale-while-revalidate=300"
 );
 
 /**
- * Negative cache on gateway / upstream errors. 10s CDN TTL absorbs stampede;
- * browser max-age=0 so clients can revalidate. Manual retry uses ?r= cache-bust
- * and is not blocked by this window.
+ * Transient gateway / recoverable upstream failures. No shared CDN negative
+ * cache so Same-URL Retry re-enters Edge immediately (accept stampede; regional
+ * rate limit is the backstop). See ADR 0001.
  */
-const ERROR_CACHE = cacheHeaders(
-  "public, max-age=0",
-  "public, s-maxage=10, stale-while-revalidate=30"
+const TRANSIENT_ERROR_CACHE = cacheHeaders("no-store", "private, no-store");
+
+/**
+ * Upstream 429/403: short CDN negative cache covers the limit window without
+ * blocking retries for as long as a generic 10s-on-everything policy would on
+ * 502/504. Browser no-store.
+ */
+const UPSTREAM_LIMIT_CACHE = cacheHeaders(
+  "no-store",
+  "public, s-maxage=10"
 );
 
 /**
@@ -53,17 +64,21 @@ const ERROR_CACHE = cacheHeaders(
  * - On limit exceed: returns 429 with Retry-After header
  * - On Redis failure: fails open (allows request) to prevent outage
  *
- * CDN layer:
- * - First allowed request hits upstream; Vercel CDN caches indefinitely (immutable)
- * - Subsequent requests: x-vercel-cache HIT, no function execution or rate limit check
- * - Hot images serve at CDN latency (~20-50ms globally)
- * - 404 / 502/504 get short negative cache so cold failures do not stampede upstream
+ * CDN layer (status-split negative cache):
+ * - 200: immutable on Canonical Image URL; warm path is HIT with no function run
+ * - 404: short-medium CDN negative cache (steady miss)
+ * - 502/504 and other transient upstream errors: no-store (Same-URL Retry)
+ * - Upstream 429/403: short CDN s-maxage
+ * - Regional 429: never cached
  *
  * Timeout: abort only if upstream headers do not arrive in time. Body streaming
  * is uncapped by this timer (platform still enforces Edge wall limits).
  *
  * Always GETs upstream (CF origins often disagree on HEAD vs GET) and strips the
  * body for client HEAD so curl -I / preflight still populate the same cache key.
+ *
+ * Client retry must not cache-bust with ?r= — success must land on canonical
+ * (RemoteImage Same-URL Retry + Reload Generation).
  */
 export async function GET(
   request: Request,
@@ -123,11 +138,17 @@ async function proxyImage(
       return new NextResponse(null, { status: 404, headers: MISS_404_CACHE });
     }
 
-    if (!res.ok) {
-      // 429/403/5xx from upstream — short negative cache, client can retry after.
+    if (res.status === 429 || res.status === 403) {
       return new NextResponse(null, {
         status: res.status,
-        headers: ERROR_CACHE,
+        headers: UPSTREAM_LIMIT_CACHE,
+      });
+    }
+
+    if (!res.ok) {
+      return new NextResponse(null, {
+        status: res.status,
+        headers: TRANSIENT_ERROR_CACHE,
       });
     }
 
@@ -154,7 +175,7 @@ async function proxyImage(
 
     return new NextResponse(timedOut ? "Gateway Timeout" : "Bad Gateway", {
       status: timedOut ? 504 : 502,
-      headers: ERROR_CACHE,
+      headers: TRANSIENT_ERROR_CACHE,
     });
   }
 }

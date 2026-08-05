@@ -49,6 +49,12 @@ function RetryIcon({ className = "" }: { className?: string }) {
  * hits Vercel Edge + CDN — first request is MISS (Edge fetches upstream),
  * subsequent requests are HIT (pure CDN, no function execution or upstream traffic).
  *
+ * Retry contract (Same-URL Retry): always request the Canonical Image URL
+ * (`imageUrl(id)`, no `?r=`). A Reload Generation counter only remounts <img>
+ * so a manual retry can re-issue the same URL; success must warm canonical,
+ * not a cache-busted variant. Transient proxy failures use no-store so this
+ * path is not blocked by short CDN negative cache (see image route + ADR 0001).
+ *
  * Layout contract:
  * - fill=true: one relative h-full w-full wrapper for aspect-ratio / CSS columns.
  * - fill=false: shrink-wrap for lightbox so object-contain can center naturally.
@@ -73,24 +79,23 @@ export default function RemoteImage({
 }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  /** Bumps on each retry so the browser re-requests (cache-bust query). */
-  const [attempt, setAttempt] = useState(0);
+  /** Remount token only — never appended to the image URL. */
+  const [reloadGeneration, setReloadGeneration] = useState(0);
   const imgRef = useRef<HTMLImageElement | null>(null);
-  /** True after onLoad / onError / complete-check for the current src. */
+  /** True after onLoad / onError / complete-check for the current src mount. */
   const settledRef = useRef(false);
   /** Track prop id without an extra render (not UI state). */
   const prevIdRef = useRef(id);
 
   if (prevIdRef.current !== id) {
     prevIdRef.current = id;
-    setAttempt(0);
+    setReloadGeneration(0);
     setLoaded(false);
     setFailed(false);
     settledRef.current = false;
   }
 
-  const baseUrl = imageUrl(id);
-  const src = attempt === 0 ? baseUrl : `${baseUrl}?r=${attempt}`;
+  const src = imageUrl(id);
 
   const settle = (ok: boolean) => {
     if (settledRef.current) return;
@@ -113,14 +118,14 @@ export default function RemoteImage({
     const img = imgRef.current;
     if (!img || !img.complete) return;
     if (img.naturalWidth > 0) settle(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- settle closes over src + callbacks
-  }, [src]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settle closes over src + generation + callbacks
+  }, [src, reloadGeneration]);
 
   const retry = () => {
     settledRef.current = false;
     setFailed(false);
     setLoaded(false);
-    setAttempt((n) => n + 1);
+    setReloadGeneration((n) => n + 1);
   };
 
   if (failed) {
@@ -179,7 +184,7 @@ export default function RemoteImage({
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        key={`${id}-${attempt}`}
+        key={`${id}-${reloadGeneration}`}
         ref={imgRef}
         src={src}
         alt={alt}
