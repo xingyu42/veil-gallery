@@ -75,6 +75,8 @@ describe("fetchImageUpstream", () => {
   it.each([
     [[429, 200], 2],
     [[403, 429, 200], 3],
+    [[502, 200], 2],
+    [[504, 502, 200], 3],
   ])("rotates limited responses %j", async (statuses, attempts) => {
     const fetchImpl = vi.fn();
     for (const status of statuses) {
@@ -93,20 +95,23 @@ describe("fetchImageUpstream", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(attempts);
   });
 
-  it("stops after three limited responses", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(response(429));
+  it.each([429, 502, 504])(
+    "stops after three retryable responses with status %i",
+    async (status) => {
+      const fetchImpl = vi.fn().mockResolvedValue(response(status));
 
-    const result = await fetchImageUpstream({
-      target: resinTarget(),
-      headers: {},
-      beforeAttempt: allowed,
-      fetchImpl: fetchImpl as typeof fetch,
-    });
+      const result = await fetchImageUpstream({
+        target: resinTarget(),
+        headers: {},
+        beforeAttempt: allowed,
+        fetchImpl: fetchImpl as typeof fetch,
+      });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
-    expect(result.kind).toBe("response");
-    if (result.kind === "response") expect(result.response.status).toBe(429);
-  });
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+      expect(result.kind).toBe("response");
+      if (result.kind === "response") expect(result.response.status).toBe(status);
+    }
+  );
 
   it.each([404, 500])("does not retry status %i", async (status) => {
     const fetchImpl = vi.fn().mockResolvedValue(response(status));
@@ -144,7 +149,25 @@ describe("fetchImageUpstream", () => {
     expect(beforeAttempt).toHaveBeenCalledTimes(2);
   });
 
-  it("does not retry or expose the proxy URL after a network failure", async () => {
+  it("does not retry a Resin network failure", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("connection reset"))
+      .mockResolvedValueOnce(response(200));
+
+    await expect(
+      fetchImageUpstream({
+        target: resinTarget(),
+        headers: {},
+        beforeAttempt: allowed,
+        fetchImpl: fetchImpl as typeof fetch,
+      })
+    ).rejects.toMatchObject({ attempts: 1, timedOut: false });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expose the proxy URL after a network failure", async () => {
     const fetchImpl = vi
       .fn()
       .mockRejectedValue(new Error(`failed ${resinTarget().url}`));

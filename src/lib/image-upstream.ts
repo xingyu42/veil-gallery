@@ -65,7 +65,7 @@ export function resolveImageUpstreamTarget(
 }
 
 function isRotationStatus(status: number): boolean {
-  return status === 429 || status === 403;
+  return status === 429 || status === 403 || status === 502 || status === 504;
 }
 
 function isTimeoutError(error: unknown): boolean {
