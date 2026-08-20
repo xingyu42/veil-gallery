@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
-import { checkUpstreamRateLimit } from "@/lib/rate-limit";
+import {
+  fetchImageUpstream,
+  ImageUpstreamFetchError,
+  resolveImageUpstreamTarget,
+} from "@/lib/image-upstream";
+import { checkImageUpstreamRateLimit } from "@/lib/rate-limit";
 import { rateLimitResponseHeaders } from "@/lib/upstream-error";
-import { USER_AGENT, upstreamImageUrl } from "@/lib/upstream";
+import { USER_AGENT } from "@/lib/upstream";
 
 export const runtime = "edge";
 
@@ -10,8 +15,6 @@ export const runtime = "edge";
  * so large bodies can stream past this window (AbortSignal.timeout would kill
  * the body mid-transfer and surface as mass 504s).
  */
-const UPSTREAM_HEADER_TIMEOUT_MS = 12_000;
-
 /** Browser + Vercel/CDN cache headers (dual CDN keys for platform quirks). */
 function cacheHeaders(browser: string, cdn: string): Record<string, string> {
   return {
@@ -57,10 +60,9 @@ const UPSTREAM_LIMIT_CACHE = cacheHeaders(
 /**
  * Proxies upstream images through Vercel Edge + CDN with per-region rate limiting.
  *
- * Rate limit layer (shared with JSON upstream via `rl:upstream`):
- * - 100 req / 5 min per Vercel region (matches upstream limit)
- * - Image MISS + live JSON fetches share the same sliding-window bucket
- * - Each region has its own outbound IP pool, so we limit each separately
+ * Rate limit layer (`rl:image-upstream`):
+ * - Configurable image attempt budget (`IMAGE_PROXY_RATE_LIMIT`) per 5 minutes
+ * - Resin uses one pool-wide key; direct mode keeps one key per Vercel region
  * - On limit exceed: returns 429 with Retry-After header
  * - On Redis failure: fails open (allows request) to prevent outage
  *
@@ -105,43 +107,49 @@ async function proxyImage(
     return new NextResponse("Bad Request", { status: 400 });
   }
 
-  // Per-region rate limit (each Vercel region has its own outbound IP pool)
-  const rateLimit = await checkUpstreamRateLimit();
-
-  if (!rateLimit.allowed) {
-    // Do not cache 429 — limit window is dynamic.
-    return new NextResponse("Rate Limit Exceeded", {
-      status: 429,
-      headers: rateLimitResponseHeaders(rateLimit.resetMs, rateLimit.limit),
-    });
-  }
-
   const referer = request.headers.get("Referer");
   const headers: HeadersInit = { "User-Agent": USER_AGENT };
   if (referer) headers.Referer = referer;
 
-  const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(),
-    UPSTREAM_HEADER_TIMEOUT_MS
-  );
-
   try {
-    const res = await fetch(upstreamImageUrl(id), {
+    const target = resolveImageUpstreamTarget(id);
+    const result = await fetchImageUpstream({
+      target,
       headers,
-      signal: controller.signal,
+      beforeAttempt: () => checkImageUpstreamRateLimit(target.resinEnabled),
     });
-    // Headers received — do not abort the body stream for large/slow images.
-    clearTimeout(timer);
+
+    if (result.kind === "local-rate-limit") {
+      return new NextResponse("Rate Limit Exceeded", {
+        status: 429,
+        headers: rateLimitResponseHeaders(
+          result.rateLimit.resetMs,
+          result.rateLimit.limit
+        ),
+      });
+    }
+
+    const res = result.response;
 
     if (res.status === 404) {
       return new NextResponse(null, { status: 404, headers: MISS_404_CACHE });
     }
 
     if (res.status === 429 || res.status === 403) {
+      const responseHeaders: Record<string, string> = {
+        ...UPSTREAM_LIMIT_CACHE,
+      };
+      const retryAfter = res.headers.get("Retry-After");
+      if (
+        retryAfter &&
+        (/^\d+$/.test(retryAfter) || !Number.isNaN(Date.parse(retryAfter)))
+      ) {
+        responseHeaders["Retry-After"] = retryAfter;
+      }
+
       return new NextResponse(null, {
         status: res.status,
-        headers: UPSTREAM_LIMIT_CACHE,
+        headers: responseHeaders,
       });
     }
 
@@ -162,15 +170,15 @@ async function proxyImage(
       },
     });
   } catch (error) {
-    clearTimeout(timer);
-
     const timedOut =
-      error instanceof Error &&
-      (error.name === "TimeoutError" || error.name === "AbortError");
+      error instanceof ImageUpstreamFetchError && error.timedOut;
+    const attempts =
+      error instanceof ImageUpstreamFetchError ? error.attempts : 0;
 
     console.error(
-      `[image-proxy] ${id}${timedOut ? " header-timeout" : ""}:`,
-      error
+      `[image-proxy] ${id} attempts=${attempts} ${
+        timedOut ? "header-timeout" : "fetch-failed"
+      }`
     );
 
     return new NextResponse(timedOut ? "Gateway Timeout" : "Bad Gateway", {

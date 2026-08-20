@@ -37,6 +37,12 @@ UPSTASH_REDIS_REST_TOKEN=...
 # KV_REST_API_URL=...
 # KV_REST_API_TOKEN=...
 
+# 可选：Resin 原生反代 HTTPS 前缀（包含 Token，必须按 Secret 管理）
+# RESIN_IMAGE_PROXY_BASE_URL=https://resin.example.com/<token>/Default/https/veil.ortlinde.com
+
+# 可选：整个图片代理池每 300 秒允许的实际回源尝试数（默认 100）
+# IMAGE_PROXY_RATE_LIMIT=300
+
 # 手工恢复端点随机密钥（/api/calibrate-offset?key=...；未配置时端点拒绝访问）
 # CRON_SECRET=replace-with-a-long-random-secret
 
@@ -70,7 +76,7 @@ cp .env.example .env.local
 | 无限滚动 | `IntersectionObserver` + `/api/galleries` |
 | 主题切换 | 自实现 ThemeProvider + localStorage + CSS 变量 |
 | 图片灯箱 | [yet-another-react-lightbox](https://github.com/igordanchenko/yet-another-react-lightbox)（`AppLightbox`）+ 自定义元数据侧栏，元数据走 `/api/image/[id]/meta` |
-| 限流保护 | 共享桶 100/5min/区域 + tag-preview 专属 60/5min/区域；图片 CDN 永久缓存；JSON `revalidate` / Route 缓存 |
+| 限流保护 | JSON 共享桶 100/5min/区域 + 可配置图片代理池桶 + tag-preview 专属桶；图片 CDN 永久缓存 |
 | 图集热度 | 详情页 beacon → Redis ZSET `gallery:pv`（无图片预热）；导航「热门」→ `/popular` RSC Top-N |
 | 图集边界 | 首次/容灾窗口二分；正常运行用稠密尾长游标 + 100 条局部窗口校正 |
 | 图集列表 / 随机预览 | CSS Grid（1–4 列） |
@@ -107,13 +113,23 @@ src/
 ## 注意事项
 
 - 上游限流约 100 次 / 5 分钟（IP 级）。服务端缓存请勿随意缩短。
-- **共享上游配额**（图片 MISS + 通用 JSON）：
+- **JSON 共享上游配额**：
   - Upstash：100 次 / 5 分钟 / Vercel 区域（`rl:upstream`）
-  - 扣费点：`apiFetch`、随机图集、图集边界初始化/校正、图片代理 MISS
+  - 扣费点：`apiFetch`、随机图集、图集边界初始化/校正
   - 策略：回源前扣费（保守）；Next data-cache 命中时也可能已扣 1 次
-  - 图片 CDN HIT / Route 级 CDN HIT：不进函数，不扣费
+  - Route 级 CDN HIT：不进函数，不扣费
   - 超限：HTTP 429 + `Retry-After` / `X-RateLimit-*`
   - Redis 未配置或故障：fail-open（放行）
+- **图片代理池配额与 Resin 轮换**：
+  - 独立桶 `rl:image-upstream`；`IMAGE_PROXY_RATE_LIMIT` 配置整个池每 300 秒的尝试总数
+  - Resin 模式遇到上游 429/403 最多尝试 3 次，每次请求由 Resin 随机选节点，不保证 IP 必然不同
+  - 每次真实回源尝试分别扣费；图片 CDN HIT 不进函数、不扣费
+  - 未配置 Resin 时保持 Vercel 区域直连；配置后 Resin 故障不会降级直连
+  - Resin 必须启用反向代理，空 Account 行为设为 `RANDOM`，且 `RESIN_PROXY_BYPASS` 不得包含 `veil.ortlinde.com`
+  - URL 中的 `Default` 是平台名；不追加 `.Account` 即为空 Account，可配合 `RANDOM` 每次重新选节点
+  - Resin 文档也展示过 `/./` 空身份写法，但标准 `fetch` 会删除该点段；项目会兼容转换，生产配置仍推荐显式 `Default`
+  - Resin 自身不提供 TLS，必须由 Caddy、Nginx 或 Cloudflare Tunnel 提供 HTTPS
+  - Resin Token 位于 URL 路径；TLS 前置层和 Resin 的访问日志必须关闭或脱敏该路径
 - **tag-preview 专属**（`/v1/tag/.../preview`，对齐上游 60/5min，**不镜像上游 ban**）：
   - 独立桶 `rl:tag-preview`：60 次 / 5 分钟 / 区域
   - 扣费：`getTagPreview` + `/api/tag-preview`（先专属桶，再共享桶）

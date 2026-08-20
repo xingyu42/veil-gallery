@@ -5,17 +5,20 @@ import { UpstreamRateLimitError } from "./upstream-error";
 /**
  * Per-region rate limiters for upstream traffic + gallery view dedupe.
  *
- * 1) Shared bucket (`rl:upstream`): all image MISS + JSON — 100 / 300s / region
- *    Aligns with the generic upstream IP budget.
- * 2) Tag-preview bucket (`rl:tag-preview`): only `/v1/tag/.../preview`
+ * 1) Shared bucket (`rl:upstream`): generic JSON — 100 / 300s / region.
+ * 2) Image bucket (`rl:image-upstream`): image attempts — configurable / 300s.
+ * 3) Tag-preview bucket (`rl:tag-preview`): only `/v1/tag/.../preview`
  *    — 60 / 300s / region (stricter endpoint policy; no local ban tracking).
- * 3) Gallery view bucket (`rl:view`): 1 / 300s per IP + galleryId (beacon dedupe).
+ * 4) Gallery view bucket (`rl:view`): 1 / 300s per IP + galleryId (beacon dedupe).
  *
  * Fail-open when Redis is missing or errors.
  */
 
 const SHARED_LIMIT = 100;
 const SHARED_WINDOW = "300 s";
+
+const DEFAULT_IMAGE_LIMIT = 100;
+const IMAGE_WINDOW = "300 s";
 
 const TAG_PREVIEW_LIMIT = 60;
 const TAG_PREVIEW_WINDOW = "300 s";
@@ -25,6 +28,7 @@ const VIEW_LIMIT = 1;
 const VIEW_WINDOW = "300 s";
 
 let sharedLimiter: Ratelimit | null = null;
+let imageLimiter: Ratelimit | null = null;
 let tagPreviewLimiter: Ratelimit | null = null;
 let viewLimiter: Ratelimit | null = null;
 let redisWarned = false;
@@ -60,6 +64,23 @@ function getSharedLimiter() {
   if (sharedLimiter) return sharedLimiter;
   sharedLimiter = createLimiter(SHARED_LIMIT, SHARED_WINDOW, "rl:upstream");
   return sharedLimiter;
+}
+
+export function imageProxyRateLimit(): number {
+  const configured = Number(process.env.IMAGE_PROXY_RATE_LIMIT);
+  return Number.isSafeInteger(configured) && configured > 0
+    ? configured
+    : DEFAULT_IMAGE_LIMIT;
+}
+
+function getImageLimiter() {
+  if (imageLimiter) return imageLimiter;
+  imageLimiter = createLimiter(
+    imageProxyRateLimit(),
+    IMAGE_WINDOW,
+    "rl:image-upstream"
+  );
+  return imageLimiter;
 }
 
 function getTagPreviewLimiter() {
@@ -136,6 +157,18 @@ export async function checkUpstreamRateLimit(
   region: string = currentRegion()
 ): Promise<RateLimitResult> {
   return runLimit(getSharedLimiter(), `region:${region}`, SHARED_LIMIT);
+}
+
+/** Consume one image attempt. Resin capacity is global; direct capacity is regional. */
+export async function checkImageUpstreamRateLimit(
+  resinEnabled: boolean,
+  region: string = currentRegion()
+): Promise<RateLimitResult> {
+  return runLimit(
+    getImageLimiter(),
+    resinEnabled ? "pool:resin" : `region:${region}`,
+    imageProxyRateLimit()
+  );
 }
 
 /**
