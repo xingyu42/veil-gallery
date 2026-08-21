@@ -71,7 +71,8 @@ const UPSTREAM_LIMIT_CACHE = cacheHeaders(
  * - 404: short-medium CDN negative cache (steady miss)
  * - 502/504 and other transient upstream errors: no-store (Same-URL Retry)
  * - Upstream 429/403: short CDN s-maxage
- * - Resin 502/504 responses: rotate up to the same three-attempt cap
+ * - Resin 502/504 responses, fetch failures, and header timeouts: rotate up to
+ *   the same three-attempt cap
  * - Regional 429: never cached
  *
  * Timeout: abort only if upstream headers do not arrive in time. Body streaming

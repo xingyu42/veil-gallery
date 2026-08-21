@@ -111,6 +111,9 @@ export async function fetchImageUpstream({
       clearTimeout(timer);
     } catch (error) {
       clearTimeout(timer);
+      if (target.resinEnabled && attempt < maxAttempts) {
+        continue;
+      }
       throw new ImageUpstreamFetchError(attempt, isTimeoutError(error));
     }
 

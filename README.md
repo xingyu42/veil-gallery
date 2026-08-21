@@ -122,7 +122,7 @@ src/
   - Redis 未配置或故障：fail-open（放行）
 - **图片代理池配额与 Resin 轮换**：
   - 独立桶 `rl:image-upstream`；`IMAGE_PROXY_RATE_LIMIT` 配置整个池每 300 秒的尝试总数
-  - Resin 模式仅在收到 429/403/502/504 时最多尝试 3 次；连接异常和响应头超时不重试
+  - Resin 模式遇到 429/403/502/504、连接异常或响应头超时最多尝试 3 次
   - 每次真实回源尝试分别扣费；图片 CDN HIT 不进函数、不扣费
   - 未配置 Resin 时保持 Vercel 区域直连；配置后 Resin 故障不会降级直连
   - Resin 必须启用反向代理，空 Account 行为设为 `RANDOM`，且 `RESIN_PROXY_BYPASS` 不得包含 `veil.ortlinde.com`
