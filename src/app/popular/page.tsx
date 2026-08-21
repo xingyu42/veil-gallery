@@ -34,12 +34,12 @@ interface Props {
 }
 
 export default async function PopularPage({ searchParams }: Props) {
-  const raw = (await searchParams).window ?? "all";
+  const raw = (await searchParams).window ?? "day";
   const window: PopularWindow = POPULAR_WINDOWS.includes(
     raw as PopularWindow
   )
     ? (raw as PopularWindow)
-    : "all";
+    : "day";
 
   const initial = await getPopularGalleries({
     window,
@@ -62,7 +62,7 @@ export default async function PopularPage({ searchParams }: Props) {
           return (
             <Link
               key={tab.key}
-              href={tab.key === "all" ? "/popular" : `/popular?window=${tab.key}`}
+              href={tab.key === "day" ? "/popular" : `/popular?window=${tab.key}`}
               className={
                 active
                   ? "rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-accent-foreground"
