@@ -10,7 +10,7 @@ function recordingRedis() {
   const pipeline = {
     zincrby: vi.fn(),
     expire: vi.fn(),
-    hset: vi.fn(),
+    eval: vi.fn(),
     exec: vi.fn().mockResolvedValue([]),
   };
   return {
@@ -38,20 +38,21 @@ describe("gallery info storage", () => {
       imageCount: 72,
     });
 
-    expect(redis.pipelineCommands.hset).toHaveBeenCalledWith(
-      "gallery:info",
-      expect.objectContaining({
-        "10088:title": "Gallery title",
-        "10088:cover_id": "568250",
-        "10088:category": "Category",
-        "10088:image_count": "72",
-        "10088:updated_at": expect.any(String),
-      })
+    expect(redis.pipelineCommands.eval).toHaveBeenCalledWith(
+      expect.stringContaining("cjson.decode"),
+      ["gallery:info"],
+      ["10088", expect.any(String)]
     );
-    expect(redis.pipelineCommands.hset).not.toHaveBeenCalledWith(
-      "gallery:info:10088",
-      expect.anything()
+    const payload = JSON.parse(
+      redis.pipelineCommands.eval.mock.calls[0]?.[2]?.[1]
     );
+    expect(payload).toEqual({
+      title: "Gallery title",
+      cover_id: 568250,
+      category: "Category",
+      image_count: 72,
+      updated_at: expect.any(String),
+    });
   });
 
   it("does not overwrite a stored cover with zero", async () => {
@@ -67,8 +68,10 @@ describe("gallery info storage", () => {
       imageCount: 72,
     });
 
-    const fields = redis.pipelineCommands.hset.mock.calls[0]?.[1];
-    expect(fields).not.toHaveProperty("10088:cover_id");
+    const payload = JSON.parse(
+      redis.pipelineCommands.eval.mock.calls[0]?.[2]?.[1]
+    );
+    expect(payload).not.toHaveProperty("cover_id");
   });
 
   it("loads ranked snapshots from the consolidated hash only", async () => {
@@ -78,16 +81,20 @@ describe("gallery info storage", () => {
       exec: vi.fn().mockResolvedValue([2, ["10088", "10089"]]),
     };
     const hmget = vi.fn().mockResolvedValue({
-      "10088:title": "First",
-      "10088:cover_id": "501",
-      "10088:category": "A",
-      "10088:image_count": "12",
-      "10088:updated_at": "2026-08-22T00:00:00.000Z",
-      "10089:title": "Second",
-      "10089:cover_id": "502",
-      "10089:category": "B",
-      "10089:image_count": "24",
-      "10089:updated_at": "2026-08-22T01:00:00.000Z",
+      "10088": {
+        title: "First",
+        cover_id: 501,
+        category: "A",
+        image_count: 12,
+        updated_at: "2026-08-22T00:00:00.000Z",
+      },
+      "10089": {
+        title: "Second",
+        cover_id: 502,
+        category: "B",
+        image_count: 24,
+        updated_at: "2026-08-22T01:00:00.000Z",
+      },
     });
     const redis = {
       pipeline: vi.fn(() => boardPipeline),
@@ -99,19 +106,7 @@ describe("gallery info storage", () => {
 
     const page = await getPopularGalleries({ window: "all", limit: 2 });
 
-    expect(hmget).toHaveBeenCalledWith(
-      "gallery:info",
-      "10088:title",
-      "10088:cover_id",
-      "10088:category",
-      "10088:image_count",
-      "10088:updated_at",
-      "10089:title",
-      "10089:cover_id",
-      "10089:category",
-      "10089:image_count",
-      "10089:updated_at"
-    );
+    expect(hmget).toHaveBeenCalledWith("gallery:info", "10088", "10089");
     expect(redis.hgetall).not.toHaveBeenCalled();
     expect(page.items.map((item) => item.id)).toEqual([10088, 10089]);
   });

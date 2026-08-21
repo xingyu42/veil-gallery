@@ -3,13 +3,18 @@ import type { GalleryListItem } from "./types";
 
 const PV_ZSET = "gallery:pv";
 const INFO_HASH = "gallery:info";
-const INFO_FIELD_NAMES = [
-  "title",
-  "cover_id",
-  "category",
-  "image_count",
-  "updated_at",
-] as const;
+const MERGE_INFO_SCRIPT = `
+local incoming = cjson.decode(ARGV[2])
+local current_raw = redis.call("HGET", KEYS[1], ARGV[1])
+if current_raw then
+  local decoded, current = pcall(cjson.decode, current_raw)
+  if decoded and incoming.cover_id == nil and current.cover_id ~= nil then
+    incoming.cover_id = current.cover_id
+  end
+end
+redis.call("HSET", KEYS[1], ARGV[1], cjson.encode(incoming))
+return 1
+`;
 
 /** Popular boards: all-time cumulative + calendar windows. */
 export type PopularWindow = "day" | "week" | "month" | "all";
@@ -69,12 +74,6 @@ export interface GalleryViewInput {
   imageCount: number;
 }
 
-type InfoFieldName = (typeof INFO_FIELD_NAMES)[number];
-
-function infoField(id: number | string, field: InfoFieldName): string {
-  return `${id}:${field}`;
-}
-
 /**
  * Record one gallery detail view into Redis: all-time ZSET + day/week/month
  * window ZSETs (TTL'd), plus the card snapshot HASH.
@@ -92,15 +91,15 @@ export async function recordGalleryView(input: GalleryViewInput): Promise<void> 
   const coverId = Math.max(0, Math.floor(input.coverId) || 0);
   const updatedAt = new Date().toISOString();
 
-  const fields: Record<string, string> = {
-    [infoField(id, "title")]: title,
-    [infoField(id, "category")]: category,
-    [infoField(id, "image_count")]: String(imageCount),
-    [infoField(id, "updated_at")]: updatedAt,
+  const snapshot: InfoHash = {
+    title,
+    category,
+    image_count: imageCount,
+    updated_at: updatedAt,
   };
   // Never overwrite a good cover with 0 from a bad snapshot.
   if (coverId > 0) {
-    fields[infoField(id, "cover_id")] = String(coverId);
+    snapshot.cover_id = coverId;
   }
 
   try {
@@ -112,7 +111,7 @@ export async function recordGalleryView(input: GalleryViewInput): Promise<void> 
       p.zincrby(key, 1, member);
       p.expire(key, WINDOW_TTL_S[w]);
     }
-    p.hset(INFO_HASH, fields);
+    p.eval(MERGE_INFO_SCRIPT, [INFO_HASH], [member, JSON.stringify(snapshot)]);
     await p.exec();
   } catch (error) {
     console.error("[gallery-views] record failed:", error);
@@ -121,30 +120,29 @@ export async function recordGalleryView(input: GalleryViewInput): Promise<void> 
 
 type InfoHash = {
   title?: string;
-  cover_id?: string;
+  cover_id?: string | number;
   category?: string;
-  image_count?: string;
+  image_count?: string | number;
   updated_at?: string;
 };
 
-type FlatInfoHash = Record<string, string | null>;
-
-function extractInfoHash(id: number, flat: FlatInfoHash | null): InfoHash | null {
-  if (!flat) return null;
-
-  const hash: InfoHash = {};
-  for (const field of INFO_FIELD_NAMES) {
-    const value = flat[infoField(id, field)];
-    if (typeof value === "string") hash[field] = value;
+function parseInfoHash(value: unknown): InfoHash | null {
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
   }
-  return Object.keys(hash).length ? hash : null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as InfoHash;
 }
 
 function mapInfoToListItem(id: number, hash: InfoHash | null): GalleryListItem | null {
   if (!hash) return null;
 
   const title = (hash.title ?? "").trim();
-  const coverId = Math.max(0, parseInt(hash.cover_id || "0", 10) || 0);
+  const coverId = Math.max(0, parseInt(String(hash.cover_id || "0"), 10) || 0);
   // Skip incomplete snapshots (no title and no cover).
   if (!title && coverId <= 0) return null;
 
@@ -153,7 +151,10 @@ function mapInfoToListItem(id: number, hash: InfoHash | null): GalleryListItem |
     title: title || `Gallery #${id}`,
     series_number: null,
     category: hash.category?.trim() ? hash.category.trim() : null,
-    image_count: Math.max(0, parseInt(hash.image_count || "0", 10) || 0),
+    image_count: Math.max(
+      0,
+      parseInt(String(hash.image_count || "0"), 10) || 0
+    ),
     status: "active",
     updated_at: hash.updated_at || new Date(0).toISOString(),
     cover:
@@ -216,16 +217,18 @@ export async function getPopularGalleries(opts?: {
 
     if (!ids.length) return emptyPage(total);
 
-    const requestedFields = ids.flatMap((id) =>
-      INFO_FIELD_NAMES.map((field) => infoField(id, field))
-    );
-    const flat = await redis.hmget<FlatInfoHash>(INFO_HASH, ...requestedFields);
+    const snapshots = await redis.hmget<
+      Record<string, InfoHash | string | null>
+    >(INFO_HASH, ...ids.map(String));
 
     const items: GalleryListItem[] = [];
     let scanned = 0;
     for (let i = 0; i < ids.length && items.length < n; i++) {
       scanned = i + 1;
-      const item = mapInfoToListItem(ids[i], extractInfoHash(ids[i], flat));
+      const item = mapInfoToListItem(
+        ids[i],
+        parseInfoHash(snapshots?.[String(ids[i])])
+      );
       if (item) items.push(item);
     }
 
