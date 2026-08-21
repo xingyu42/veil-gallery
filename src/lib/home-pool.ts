@@ -6,6 +6,7 @@ import { getRedis } from "./redis";
 import { resolveGalleryBoundary } from "./start-offset";
 import {
   GALLERY_BOUNDARY_UNAVAILABLE,
+  getErrorMessage,
   getRateLimitResetMs,
   isHardUpstreamFailure,
 } from "./upstream-error";
@@ -14,10 +15,8 @@ import {
  * Homepage random pool: one list fetch at a random offset inside the dense
  * tail (skipping a small edge band), filtered by isDisplayableGallery and
  * shared via Redis so per-visitor randomness costs zero upstream quota.
- * Rebuilt lazily after TTL by the first visitor.
- *
- * Failure policy (by design): no data fallback — builders throw and the page
- * shows its existing banner. failKey only suppresses rebuild storms.
+ * Rebuilt after TTL outside the page response. A bounded stale record remains
+ * renderable while refresh runs or the upstream is temporarily unavailable.
  */
 
 const RECORD_KEY = "home:random-pool:v1";
@@ -27,8 +26,8 @@ const LOCK_TTL_MS = 180_000;
 const BUILD_WAIT_MS = 30_000;
 const BUILD_POLL_MS = 2_000;
 const FAIL_KEY_DEFAULT_TTL_MS = 60_000;
-/** Redis record outlives freshness so stale pools stay readable for rebuilds. */
-const RECORD_TTL_SLACK_MS = 600_000;
+/** Keep a bounded stale pool available while refresh happens off the request path. */
+const RECORD_TTL_SLACK_MS = 86_400_000;
 /** Minimum renderable items required to publish a pool. */
 const MIN_POOL_ITEMS = 8;
 /** Dense-tail edge band skipped when sampling (half-uploaded items cluster here). */
@@ -51,7 +50,24 @@ type HomePoolRecord = {
 type HomePoolRuntimeState = {
   memory: HomePoolRecord | null;
   buildPromise: Promise<HomePoolRecord | null> | null;
+  failure: HomePoolFailureRecord | null;
 };
+
+type HomePoolFailureRecord = {
+  message: string;
+  until: number;
+  retryAfterSeconds: number;
+};
+
+export type HomePoolSnapshot =
+  | { status: "fresh" | "stale"; items: GalleryListItem[] }
+  | { status: "missing"; items: [] }
+  | {
+      status: "failed";
+      items: [];
+      error: string;
+      retryAfterSeconds: number;
+    };
 
 const homePoolGlobal = globalThis as typeof globalThis & {
   __veilGalleryHomePool?: HomePoolRuntimeState;
@@ -59,7 +75,10 @@ const homePoolGlobal = globalThis as typeof globalThis & {
 const runtimeState = (homePoolGlobal.__veilGalleryHomePool ??= {
   memory: null,
   buildPromise: null,
+  failure: null,
 });
+// Preserve compatibility with a runtime state created before this field existed.
+runtimeState.failure ??= null;
 
 /** Env is fixed for the process lifetime — parse once. */
 const POOL_SIZE = (() => {
@@ -77,6 +96,10 @@ const POOL_TTL_MS = (() => {
 
 function isFresh(record: HomePoolRecord): boolean {
   return Date.now() - record.builtAt < POOL_TTL_MS;
+}
+
+function isRetained(record: HomePoolRecord): boolean {
+  return Date.now() - record.builtAt < POOL_TTL_MS + RECORD_TTL_SLACK_MS;
 }
 
 function isHomePoolRecord(value: unknown): value is HomePoolRecord {
@@ -123,24 +146,56 @@ async function persistRecord(record: HomePoolRecord): Promise<void> {
   }
 }
 
-async function markFailure(ttlMs: number): Promise<void> {
+function isFailureRecord(value: unknown): value is HomePoolFailureRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<HomePoolFailureRecord>;
+  return (
+    typeof record.message === "string" &&
+    Number.isFinite(record.until) &&
+    Number.isFinite(record.retryAfterSeconds)
+  );
+}
+
+async function markFailure(error: unknown, ttlMs: number): Promise<void> {
+  const safeTtlMs = Math.max(1_000, ttlMs);
+  const failure: HomePoolFailureRecord = {
+    message: getErrorMessage(error, "HOME_POOL_BUILD_RECENTLY_FAILED"),
+    until: Date.now() + safeTtlMs,
+    retryAfterSeconds: Math.max(1, Math.ceil(safeTtlMs / 1_000)),
+  };
+  runtimeState.failure = failure;
   const redis = getRedis();
   if (!redis) return;
   try {
-    await redis.set(FAIL_KEY, 1, { px: Math.max(1_000, ttlMs) });
+    await redis.set(FAIL_KEY, failure, { px: safeTtlMs });
   } catch (error) {
     console.error("[home-pool] Redis fail-mark write failed:", error);
   }
 }
 
-async function hasRecentFailure(): Promise<boolean> {
+async function readRecentFailure(): Promise<HomePoolFailureRecord | null> {
+  if (runtimeState.failure && runtimeState.failure.until > Date.now()) {
+    return runtimeState.failure;
+  }
+  runtimeState.failure = null;
   const redis = getRedis();
-  if (!redis) return false;
+  if (!redis) return null;
   try {
-    return (await redis.get<string>(FAIL_KEY)) != null;
+    const stored = await redis.get<unknown>(FAIL_KEY);
+    if (stored == null) return null;
+    if (isFailureRecord(stored) && stored.until > Date.now()) {
+      runtimeState.failure = stored;
+      return stored;
+    }
+    // Backward compatibility for the previous numeric fail marker.
+    return {
+      message: "HOME_POOL_BUILD_RECENTLY_FAILED",
+      until: Date.now() + 1_000,
+      retryAfterSeconds: 1,
+    };
   } catch (error) {
     console.error("[home-pool] Redis fail-mark read failed:", error);
-    return false;
+    return null;
   }
 }
 
@@ -271,7 +326,7 @@ async function runBuildSingleFlight(): Promise<HomePoolRecord | null> {
   try {
     return await runtimeState.buildPromise;
   } catch (error) {
-    void markFailure(failTtlMs(error));
+    void markFailure(error, failTtlMs(error));
     if (isHardUpstreamFailure(error)) throw error;
     console.error("[home-pool] Build failed:", error);
     return null;
@@ -280,30 +335,46 @@ async function runBuildSingleFlight(): Promise<HomePoolRecord | null> {
   }
 }
 
-/**
- * Shared random pool for the homepage. Throws on hard failure (no fallback by
- * design); the page-level catch renders the existing banner.
- */
-export async function getHomePoolItems(): Promise<GalleryListItem[]> {
-  if (runtimeState.memory && isFresh(runtimeState.memory)) {
-    return runtimeState.memory.items;
+/** Read-only request path: never waits for upstream pool construction. */
+export async function getHomePoolSnapshot(): Promise<HomePoolSnapshot> {
+  let retainedMemory: HomePoolRecord | null = null;
+  if (runtimeState.memory) {
+    if (isFresh(runtimeState.memory)) {
+      return { status: "fresh", items: runtimeState.memory.items };
+    }
+    if (isRetained(runtimeState.memory)) {
+      retainedMemory = runtimeState.memory;
+    } else {
+      runtimeState.memory = null;
+    }
   }
 
-  // Re-read Redis on memory miss/stale so a peer rebuild is visible.
-  // Fail-mark is independent of the record; fetch both in parallel.
+  // A peer may have published a newer pool, so Redis remains authoritative even
+  // when this process still has a stale record.
   const [cached, recentFailure] = await Promise.all([
     readRedisRecord(),
-    hasRecentFailure(),
+    readRecentFailure(),
   ]);
-  if (cached && isFresh(cached)) {
-    return cached.items;
+  const available = cached && isRetained(cached) ? cached : retainedMemory;
+  if (available) {
+    return {
+      status: isFresh(available) ? "fresh" : "stale",
+      items: available.items,
+    };
   }
   if (recentFailure) {
-    throw new Error("HOME_POOL_BUILD_RECENTLY_FAILED");
+    return {
+      status: "failed",
+      items: [],
+      error: recentFailure.message,
+      retryAfterSeconds: recentFailure.retryAfterSeconds,
+    };
   }
+  return { status: "missing", items: [] };
+}
 
-  const built = await runBuildSingleFlight();
-  if (built) return built.items;
-
-  throw new Error("HOME_POOL_UNAVAILABLE");
+/** Build or refresh the shared pool, respecting the existing failure backoff. */
+export async function refreshHomePool(): Promise<boolean> {
+  if (await readRecentFailure()) return false;
+  return (await runBuildSingleFlight()) !== null;
 }

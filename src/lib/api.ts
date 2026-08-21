@@ -52,11 +52,11 @@ export async function apiFetch<T>(
 }
 
 export async function getSiteConfig(): Promise<SiteConfig> {
-  return apiFetch("/v1/site-config", 3600);
+  return apiFetch("/v1/site-config", 3600, { timeoutMs: 8_000 });
 }
 
 export async function getFeaturedTags(): Promise<{ items: FeaturedTag[] }> {
-  return apiFetch("/v1/featured-tags", 3600);
+  return apiFetch("/v1/featured-tags", 3600, { timeoutMs: 8_000 });
 }
 
 export async function getCategories(): Promise<{

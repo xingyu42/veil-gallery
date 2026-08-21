@@ -1,31 +1,46 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getSiteConfig, getFeaturedTags } from "@/lib/api";
-import { getHomePoolItems } from "@/lib/home-pool";
-import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
-import type { GalleryListItem } from "@/lib/types";
 import FeaturedBar from "@/components/FeaturedBar";
-import GalleryCard from "@/components/GalleryCard";
+import HomeGalleryPreview from "@/components/HomeGalleryPreview";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
 
-const HOME_PREVIEW_COUNT = 8;
-
-function pickRandom<T>(items: T[], n: number): T[] {
-  const want = Math.min(n, items.length);
-  if (want <= 0) return [];
-  // Partial Fisher-Yates: only shuffle the first `want` slots.
-  const a = items.slice();
-  for (let i = 0; i < want; i++) {
-    const j = i + Math.floor(Math.random() * (a.length - i));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a.slice(0, want);
-}
-
 interface Props {
   searchParams: Promise<{ category?: string }>;
+}
+
+async function SiteScale() {
+  try {
+    const config = await getSiteConfig();
+    const scale = config.scale;
+    return (
+      <p className="relative mt-4 text-xs text-subtle">
+        {scale.galleries.toLocaleString()} 图集 · {scale.images.toLocaleString()} 图片 ·{" "}
+        {scale.tags.toLocaleString()} 标签
+      </p>
+    );
+  } catch (error) {
+    console.error("[home] Site config unavailable:", error);
+    return null;
+  }
+}
+
+async function FeaturedTagsSection() {
+  try {
+    const tags = await getFeaturedTags();
+    if (!tags.items?.length) return null;
+    return (
+      <div className="mb-10">
+        <FeaturedBar featuredTags={tags.items} />
+      </div>
+    );
+  } catch (error) {
+    console.error("[home] Featured tags unavailable:", error);
+    return null;
+  }
 }
 
 export default async function HomePage({ searchParams }: Props) {
@@ -34,26 +49,6 @@ export default async function HomePage({ searchParams }: Props) {
   if (params.category?.trim()) {
     redirect("/galleries");
   }
-
-  let config = null;
-  let featuredTags: { id: number; name: string; normalized_name: string }[] = [];
-  let galleries: GalleryListItem[] = [];
-  let error: string | null = null;
-
-  try {
-    const [cfg, tags, poolItems] = await Promise.all([
-      getSiteConfig(),
-      getFeaturedTags(),
-      getHomePoolItems(),
-    ]);
-    config = cfg;
-    featuredTags = tags.items || [];
-    galleries = pickRandom(poolItems, HOME_PREVIEW_COUNT);
-  } catch (e) {
-    error = getErrorMessage(e, "加载失败");
-  }
-
-  const scale = config?.scale;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
@@ -68,12 +63,9 @@ export default async function HomePage({ searchParams }: Props) {
         <p className="relative mx-auto mt-4 max-w-2xl text-base leading-7 text-muted">
           现代时尚写真 · 精选标签发现
         </p>
-        {scale && (
-          <p className="relative mt-4 text-xs text-subtle">
-            {scale.galleries.toLocaleString()} 图集 · {scale.images.toLocaleString()}{" "}
-            图片 · {scale.tags.toLocaleString()} 标签
-          </p>
-        )}
+        <Suspense fallback={null}>
+          <SiteScale />
+        </Suspense>
         <div className="relative mt-7 flex flex-wrap justify-center gap-3">
           <Link
             href="/galleries"
@@ -90,20 +82,9 @@ export default async function HomePage({ searchParams }: Props) {
         </div>
       </section>
 
-      {error && (
-        <div className="mb-8 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-status-warning">
-          {describeUpstreamError(
-            error,
-            "源站接口限流，请稍后再试（约 30 分钟）"
-          )}
-        </div>
-      )}
-
-      {featuredTags.length > 0 && (
-        <div className="mb-10">
-          <FeaturedBar featuredTags={featuredTags} />
-        </div>
-      )}
+      <Suspense fallback={null}>
+        <FeaturedTagsSection />
+      </Suspense>
 
       <section>
         <div className="mb-6 flex items-end justify-between gap-4">
@@ -122,17 +103,7 @@ export default async function HomePage({ searchParams }: Props) {
             全部图集 →
           </Link>
         </div>
-        {galleries.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {galleries.map((gallery) => (
-              <GalleryCard key={gallery.id} gallery={gallery} />
-            ))}
-          </div>
-        ) : (
-          !error && (
-            <p className="py-20 text-center text-subtle">暂无可用图集</p>
-          )
-        )}
+        <HomeGalleryPreview />
       </section>
     </div>
   );
