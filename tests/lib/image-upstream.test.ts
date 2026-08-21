@@ -3,7 +3,7 @@ import {
   fetchImageUpstream,
   ImageUpstreamFetchError,
   resolveImageUpstreamTarget,
-} from "./image-upstream";
+} from "@/lib/image-upstream";
 
 const allowed = () => Promise.resolve({ allowed: true, limit: 300, resetMs: 0 });
 

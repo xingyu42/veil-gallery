@@ -16,7 +16,7 @@ vi.mock("@/lib/home-pool", () => ({
   refreshHomePool: mocks.refreshHomePool,
 }));
 
-import { GET } from "./route";
+import { GET } from "@/app/api/home-preview/route";
 
 function gallery(id: number): GalleryListItem {
   return {

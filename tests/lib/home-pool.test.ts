@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { GalleryListItem } from "./types";
+import type { GalleryListItem } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
@@ -13,15 +13,15 @@ const mocks = vi.hoisted(() => ({
   isHardUpstreamFailure: vi.fn(() => false),
 }));
 
-vi.mock("./api", () => ({
+vi.mock("@/lib/api", () => ({
   apiFetch: mocks.apiFetch,
   isDisplayableGallery: mocks.isDisplayableGallery,
 }));
-vi.mock("./redis", () => ({ getRedis: mocks.getRedis }));
-vi.mock("./start-offset", () => ({
+vi.mock("@/lib/redis", () => ({ getRedis: mocks.getRedis }));
+vi.mock("@/lib/start-offset", () => ({
   resolveGalleryBoundary: mocks.resolveGalleryBoundary,
 }));
-vi.mock("./upstream-error", () => ({
+vi.mock("@/lib/upstream-error", () => ({
   GALLERY_BOUNDARY_UNAVAILABLE: "GALLERY_BOUNDARY_UNAVAILABLE",
   getErrorMessage: mocks.getErrorMessage,
   getRateLimitResetMs: mocks.getRateLimitResetMs,
@@ -74,7 +74,7 @@ async function loadPool() {
   }).__veilGalleryHomePool;
   vi.stubEnv("HOME_RANDOM_POOL_SIZE", "8");
   vi.stubEnv("HOME_RANDOM_POOL_TTL_SECONDS", "60");
-  return import("./home-pool");
+  return import("@/lib/home-pool");
 }
 
 beforeEach(() => {
