@@ -95,7 +95,12 @@ export default function GalleryImages({ gallery }: Props) {
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [error, hasMore, loadMore]);
+    // images.length is load-bearing, not incidental. IntersectionObserver only
+    // fires on threshold crossings, so any page that adds less height than the
+    // load-ahead range leaves the sentinel intersecting and silently ends the
+    // chain — routine on a tall desktop, not just for panoramic batches.
+    // Re-observing re-fires the initial callback and keeps it alive.
+  }, [error, hasMore, images.length, loadMore]);
 
   const masonryItems = useMemo<MasonryItem<Cell>[]>(
     () =>
