@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RemoteImage from "./RemoteImage";
 import AppLightbox from "./AppLightbox";
-import ShortestColumnMasonry, {
-  relativeHeight,
-  type MasonryItem,
-} from "./ShortestColumnMasonry";
+import JustifiedLayout, { type JustifiedItem } from "./JustifiedLayout";
 import { availableImages } from "@/lib/api";
+import { aspectRatio } from "@/lib/justified";
 import type { GalleryDetail, GalleryImage, GalleryImagePage } from "@/lib/types";
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
@@ -102,29 +100,18 @@ export default function GalleryImages({ gallery }: Props) {
     // Re-observing re-fires the initial callback and keeps it alive.
   }, [error, hasMore, images.length, loadMore]);
 
-  const masonryItems = useMemo<MasonryItem<Cell>[]>(
+  const justifiedItems = useMemo<JustifiedItem<Cell>[]>(
     () =>
       images.map((image, index) => ({
         key: image.id,
         data: { image, index },
-        weight: relativeHeight(image.width, image.height),
+        ratio: aspectRatio(image.width, image.height),
         render: ({ image: img, index: idx }) => {
-          const hasSize =
-            typeof img.width === "number" &&
-            typeof img.height === "number" &&
-            img.width > 0 &&
-            img.height > 0;
-
           return (
             <button
               type="button"
               onClick={() => setActiveIndex(idx)}
-              className="group relative w-full cursor-zoom-in overflow-hidden rounded-lg bg-placeholder text-left ring-1 ring-border transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
-              style={{
-                aspectRatio: hasSize
-                  ? `${img.width} / ${img.height}`
-                  : "3 / 4",
-              }}
+              className="group relative h-full w-full cursor-zoom-in overflow-hidden rounded-lg bg-placeholder text-left ring-1 ring-border transition hover:ring-accent/40 focus:ring-2 focus:ring-accent/60"
               aria-label={`放大查看 ${gallery.title} 第 ${img.sort_order} 张`}
             >
               <RemoteImage
@@ -151,7 +138,7 @@ export default function GalleryImages({ gallery }: Props) {
 
   return (
     <>
-      <ShortestColumnMasonry items={masonryItems} gapClassName="gap-3" />
+      <JustifiedLayout items={justifiedItems} />
 
       <div ref={sentinelRef} className="flex min-h-24 items-center justify-center py-6">
         {loading && (
