@@ -10,7 +10,7 @@ import type { GalleryDetail, GalleryImage, GalleryImagePage } from "@/lib/types"
 import { describeUpstreamError, getErrorMessage } from "@/lib/upstream-error";
 
 const PAGE_SIZE = 20;
-/** First viewport row(s): 4 cols × 2 rows covers desktop LCP candidates. */
+/** First viewport: ~4 portrait tiles × 2 justified rows covers desktop LCP candidates. */
 const PRIORITY_IMAGE_COUNT = 8;
 
 type Cell = { image: GalleryImage; index: number };
